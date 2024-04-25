@@ -1,3 +1,17 @@
+.DS_Store
+temp
+explorations
+selenium-server.log
+browserstack.err
+.idea
+debug.log
+yalc.lock
+.yalc
+local.log
+_selenium-server.log
+packages/*/LICENSE
+tracing_output
+
 # Logs
 logs
 *.log
