@@ -1,54 +1,22 @@
-import { StateTree } from 'pinia';
-
-export type StateKeyType = string | number | symbol;
-
-export type ListenerPersister = (args: Array<unknown>) => void;
-
 /**
  * Prettify<T> 用于优化源码文档，即鼠标放上去看到的 TypeScript 类型注释
  * 当定的类型由多个类型用 & 求字段并集后，会导致鼠标查看类型变得困难，用 Prettify<T> 可避免这种问题
  */
 type Prettify<T> = { [K in keyof T]: T[K] };
 
-export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
-export type CnPersistStates<S extends StateTree> = { [K in keyof S]?: CnStatePersistOptions };
-
-export interface CnPersistOptions<S extends StateTree> {
-  /**
-   * Storage key to use.
-   * @default $store.id
-   */
-  key?: string | ((id: string) => string);
-
-  /**
-   * Where to store persisted state.
-   * @default localStorage
-   */
-  storage?: StorageLike;
-
-  states?: CnPersistStates<S>;
-
-  /**
-   * Logs errors in console when enabled.
-   * @default false
-   */
-  debug?: boolean;
+export interface CnPersistOptions {
+  stateConverters?: Record<string, CnStateConverter>;
 }
 
 export type CnPersistFactoryOptions = Prettify<
-  Pick<CnPersistOptions<StateTree>, 'storage' | 'debug'> & {
+  Pick<CnPersistOptions, 'stateConverters'> & {
     /**
      * 持久化全局防抖延迟，单位为毫秒
      * 也就是说，所有的持久化操作的间隔不会小于这个间隔时间，避免频繁硬盘 I/O
-     * globalDebounce 小于等于 0 时，禁用防抖
      */
     globalDebounce?: number;
-    /**
-     * Global key generator, allows pre/postfixing store keys.
-     * @default storeKey => storeKey
-     */
-    key?: (storeKey: string) => string;
     /**
      * 全局配置，自动持久化所有 stores，可以通过在特定 store 中进行配置覆盖此全局配置
      * @default false
@@ -57,35 +25,10 @@ export type CnPersistFactoryOptions = Prettify<
   }
 >;
 
-/**
- * store 域的上下文
- */
-export interface CnStorePersistContext {
-  storage: StorageLike;
-  /**
-   * 当前 store 的所有持久化数据的 storage key 前缀
-   */
-  key: string;
-  debug: boolean;
-  states: CnPersistStates<StateTree>;
-  storeState: StateTree;
-}
-/**
- * state 域的上下文
- */
-export interface CnStatePersistContext {
-  stateKey: string;
-  persistKey: string;
-  statePersistOptions: CnStatePersistOptions;
-  storePersistContext: CnStorePersistContext;
-}
-
 export type CnStateSerializer = (newValue: unknown) => string | null;
 export type CnStateDeserializer = (persistedValue: string) => unknown | null;
 export type CnDeserializePostHandler = (newValue: unknown) => unknown | null;
-export type CnPersistPolicy = 'STRING' | 'HASH';
-export interface CnStatePersistOptions {
-  policy?: CnPersistPolicy;
+export interface CnStateConverter {
   /**
    * 持久化类型，类似 Redis 的字符串类型与哈希类型
    * STRING：
@@ -116,13 +59,10 @@ export interface CnStatePersistOptions {
   deserializePostHandler?: CnDeserializePostHandler;
 }
 
-/**
- * 持久化事件类型
- */
-export type CnPersistEventType = 'STRING' | 'HASH' | 'HASH_RESET';
+export type CnPersistType = 'STRING' | 'HASH' | 'HASH_RESET';
 
 export type CnPersistEvent = {
-  type: CnPersistEventType;
+  type: CnPersistType;
   newValue: unknown;
   stateSerializer: CnStateSerializer;
 };
@@ -130,6 +70,6 @@ export type CnPersistEvent = {
 declare module 'pinia' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   export interface DefineStoreOptionsBase<S extends StateTree, Store> {
-    cnPersist?: boolean | CnPersistOptions<S>;
+    cnPersist?: boolean | CnPersistOptions;
   }
 }

@@ -1,6 +1,7 @@
 import { createCnPersistPiniaPlugin } from './plugin'
 
 export {
+  type CnStateConverter,
   type CnPersistFactoryOptions,
   type CnStateSerializer,
   type CnStateDeserializer,

@@ -1,137 +1,153 @@
 import { PiniaPluginContext } from 'pinia';
-import { CnPersistType, CnPersistOptions } from './types';
-import { getPersistKey, getStateSerializer } from './util';
-import { emitPersistEvent, produceActionPersister, setGlobalDebounce } from './persist';
-import { restoreHash, restoreString } from './restore';
+import {
+  CnPersistFactoryOptions,
+  CnStatePersistContext,
+  CnStatePersistOptions,
+  ListenerPersister,
+  StateKeyType,
+} from './types';
+import { setGlobalDebounce } from './persist';
+import {
+  DEFAULT_DESERIALIZE_POST_HANDLER,
+  DEFAULT_STATE_DESERIALIZER,
+  DEFAULT_STATE_SERIALIZER,
+  getPersistKey,
+  mixOptions,
+  produceStorePersistContext,
+} from './util';
+import { initPersistOrRestore, registerListener, registerPersister } from './init';
 
-/**
- * Action 名称前缀：设置某个 state 的值
- * Action 的参数为 state 的值
- */
-const SET_PREFIX = 'setAndPersist';
-/**
- * Action 名称前缀：设置某个 Record 类型的 state 中的某个 Entry 的 key value
- * 每个 Entry 独立持久化
- * Action 的参数为 Record 的 key 和 value
- */
-const HSET_PREFIX = `h${SET_PREFIX}`;
-/**
- * Action 名称前缀：设置某个 Record 类型的 state 的值
- * 与 HSET_PREFIX 的持久化方式相同，即每个 Entry 独立持久化
- * Action 的参数为 state 的值，即一个 Record 类型的值
- */
-const HRESET_PREFIX = `hre${SET_PREFIX}`;
-/**
- * 不同的 Action 前缀对应的持久化类型
- */
-const actionPrefixToPersistType: Record<string, CnPersistType> = {
-  [SET_PREFIX]: 'STRING',
-  [HSET_PREFIX]: 'HASH',
-  [HRESET_PREFIX]: 'HASH_RESET',
-};
+export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
+  const { auto = false, globalDebounce = 500 } = factoryOptions;
 
-const getStateKey = (actionName: string, prefix: string) => {
-  const stateKey_ = actionName.substring(prefix.length);
-  return stateKey_ ? stateKey_.charAt(0).toLowerCase() + stateKey_.substring(1) : '';
-};
+  // 根据配置设置全局防抖延迟
+  setGlobalDebounce(globalDebounce);
 
-declare type ActionListenerPersisterRegistry = Record<string, (args: Array<unknown>) => void>;
-
-function cnPersistentPiniaPlugin_(context: PiniaPluginContext) {
-  /**
-   * 这里会为每个 store 执行一次
-   */
-  const { store, options } = context;
-  const storeId = store.$id;
-  /**
-   * Action 持久化器注册中心，将每个需要持久化的 Action 注册其中
-   * 在初始化时提前判断取值，尽可能减少运行时计算
-   */
-  const actionListenerPersisterRegistry: ActionListenerPersisterRegistry = {};
-  /**
-   * 为了避免重复加载持计划数据，采用 restoredKeys 记录一下已经恢复的持久化 key
-   * 因为同一个 state 可能存在多个持久化 Action，但只需被恢复一次
-   * 例如一个 Record 类型的 state 可能有一个 hash set 和一个 hash reset 的 Action
-   */
-  const restoredKeys: Set<string> = new Set();
-  Object.keys(options.actions).forEach(actionName => {
-    let actionPrefix = '';
-    if (actionName.startsWith(SET_PREFIX)) {
-      actionPrefix = SET_PREFIX;
-    } else if (actionName.startsWith(HSET_PREFIX)) {
-      actionPrefix = HSET_PREFIX;
-    } else if (actionName.startsWith(HRESET_PREFIX)) {
-      actionPrefix = HRESET_PREFIX;
-    }
-    if (actionPrefix) {
-      const stateKey = getStateKey(actionName, actionPrefix);
-      const persistKey = getPersistKey(storeId, stateKey);
-      const stateSerializer = getStateSerializer(options, stateKey);
-      const persistType = actionPrefixToPersistType[actionPrefix];
-
-      // 注册在 Action 监听器中使用的持久化器
-      actionListenerPersisterRegistry[actionName] = produceActionPersister(persistKey, persistType, stateSerializer);
-
-      const stringValue = localStorage.getItem(persistKey);
-      if (!stringValue) {
-        // 如果持久化数据不存在，则检查 state 是否有初始值，如果有则对初始值进行持久化
-        const initValue = context.store[stateKey];
-        if (initValue) {
-          emitPersistEvent(persistKey, persistType == 'STRING' ? 'STRING' : 'HASH_RESET', initValue, stateSerializer);
-        }
-      } else if (!restoredKeys.has(persistKey)) {
-        /**
-         * 已经存在持久化数据，且还没有被恢复过，则恢复持久化数据
-         * 这种情况下以持久化数据为准，即如果 state 有初始值，则初始值会被持久化数据覆盖
-         */
-        switch (persistType) {
-          case 'STRING':
-            restoreString(stringValue, stateKey, context);
-            break;
-          case 'HASH_RESET':
-          case 'HASH':
-            restoreHash(stringValue, persistKey, stateKey, context);
-            break;
-        }
-        restoredKeys.add(persistKey);
-      }
-    }
-  });
-
-  if (Object.keys(actionListenerPersisterRegistry).length > 0) {
+  return (context: PiniaPluginContext) => {
     /**
-     * 通过 $onAction 注册 Action 监听器来持久化 state
-     * 必须为任何需要持久化的 state 定义一个 action，只有通过调用这个 action 来设置 state 才能对其持久化
-     * 哪些 Action 会持久化以及如何持久化，由 Action 的命名约定确定，而无需通过配置来指定 Action
-     * 这样做的好处是，在任何调用这个 Action 的地方都能见名知意，看到方法名就知道会持久化，且知道如何持久化的
-     *
-     * 之所以不用 $subscribe 来监听变化，是因为如果 state 为 Record 类型，在设置这个 Record 的某个 key 的值时
-     * 在通过 $subscribe 注册的监听器中无法知道改变的是哪个 state
+     * 这里会为每个 store 执行一次
      */
-    store.$onAction(listenerContext => {
-      listenerContext.after(() => {
-        /**
-         * 注册 action 成功执行后的监听器，在这里进行持久化
-         * 运行时从 actionListenerPersisterRegistry 拿到 Action 对应的持久化器直接调用，匹配所需时间复杂度为 O(1)
-         * 所有匹配与取值，尽可能提前到初始化阶段，将运行时计算量降至最低
-         */
-        const actionPersister = actionListenerPersisterRegistry[listenerContext.name];
-        if (actionPersister) {
-          actionPersister(listenerContext.args);
-        }
-      });
-    });
-  }
+    const {
+      options: { cnPersist = auto, actions },
+      store,
+      pinia,
+    } = context;
 
-  return {};
-}
-
-export const createCnPersistPiniaPlugin = (plugingOptions?: CnPersistOptions) => {
-  if (plugingOptions) {
-    const globalDebounce = plugingOptions.globalDebounce;
-    if (globalDebounce && globalDebounce > 0) {
-      setGlobalDebounce(globalDebounce);
+    if (!cnPersist) {
+      return;
     }
-  }
-  return cnPersistentPiniaPlugin_;
+
+    const storeId = store.$id;
+
+    // HMR handling, ignores stores created as "hot" stores
+    /* c8 ignore start */
+    if (!(storeId in pinia.state.value)) {
+      // @ts-expect-error `_s is a stripped @internal`
+      const original_store = pinia._s.get(storeId.replace('__hot:', ''));
+      if (original_store) {
+        Promise.resolve().then(() => original_store.$persist());
+      }
+      return;
+    }
+    /* c8 ignore stop */
+
+    const storeState = store.$state;
+
+    // 创建 store 上下文
+    const storePersistContext = produceStorePersistContext(
+      factoryOptions,
+      storeId,
+      storeState,
+      mixOptions(cnPersist, factoryOptions),
+    );
+
+    // produceStorePersistContext 中抛异常时会返回 null，此时会忽略当前 store，继续配置别的 store
+    if (!storePersistContext) {
+      return;
+    }
+
+    const { key, states } = storePersistContext;
+
+    // 持久化器注册中心
+    const mutationPersisterRegistry: Map<StateKeyType, ListenerPersister> = new Map();
+    const mutationObjectPersisterRegistry: Map<object, ListenerPersister> = new Map();
+    const mutationObjectPersisterUtil: Map<StateKeyType, object> = new Map();
+    const actionPersisterRegistry: Map<string, ListenerPersister> = new Map();
+
+    /**
+     * 为了方便用户配置 states 时能利用 typescript 自动根据 state 补全 state key
+     * states 的类型拥有所有 state 的 key
+     * 这里过滤掉那些没有值的 key
+     */
+    const stateOptionsEntries: Array<[string, CnStatePersistOptions]> = Object.entries(states).filter(entry => {
+      return !!entry[1];
+    }) as Array<[string, CnStatePersistOptions]>;
+
+    // 遍历当前 store 中的每个配置了持久化的 state key
+    stateOptionsEntries.forEach(([stateKey, statePersistOptions]) => {
+      // state 的持久化 key，即 storage 使用的 key
+      const persistKey = getPersistKey(key, stateKey);
+
+      // 创建 state 上下文
+      const {
+        policy = 'STRING',
+        serialize = DEFAULT_STATE_SERIALIZER,
+        deserialize = DEFAULT_STATE_DESERIALIZER,
+        deserializePostHandler = DEFAULT_DESERIALIZE_POST_HANDLER,
+      } = statePersistOptions;
+      const statePersistContext: CnStatePersistContext = {
+        stateKey,
+        persistKey,
+        statePersistOptions: { policy, serialize, deserialize, deserializePostHandler },
+        storePersistContext,
+      };
+
+      /**
+       * 为当前 store 中的每个配置了持久化的 state，注册持久化器
+       * 以便在运行时可以根据 state key 或 target 对象直接从注册中心以 O(1) 获取
+       */
+      registerPersister(
+        mutationPersisterRegistry,
+        mutationObjectPersisterRegistry,
+        mutationObjectPersisterUtil,
+        actionPersisterRegistry,
+        actions,
+        statePersistContext,
+      );
+
+      /**
+       * 为当前 store 的每个 state 执行初始化操作
+       * 有持久化数据则用持久化数据设置 state 的值，这种情况持久化值会覆盖 state 的初始值
+       * 如果没有持久化数据，而 state 有初始值，则为 state 的初始值进行持久化
+       */
+      initPersistOrRestore(statePersistContext);
+    });
+
+    // 注册 mutation 和 Action 监听器，以触发持久化
+    registerListener(
+      store,
+      mutationPersisterRegistry,
+      mutationObjectPersisterRegistry,
+      mutationObjectPersisterUtil,
+      actionPersisterRegistry,
+      storePersistContext,
+    );
+
+    /**
+     * 无论哪种策略或实现方式，mutationPersisterRegistry 中都会注册 state 级别的持久化器
+     * 因此数据的整体持久化基于 mutationPersisterRegistry 即可
+     * 如果注册中心为空，则注册一个空函数，保证用户调用 $persist 的代码不会报错
+     */
+    store.$persist =
+      mutationPersisterRegistry.size > 0
+        ? () => {
+            stateOptionsEntries.forEach(([stateKey]) => {
+              const mutationPersister: ListenerPersister = mutationPersisterRegistry.get(stateKey)!;
+              mutationPersister([storeState[stateKey]]);
+            });
+          }
+        : () => {};
+
+    return {};
+  };
 };
