@@ -1,0 +1,41 @@
+{
+    "files.eol": "\n",
+    "editor.quickSuggestions": {
+        "strings": true
+    },
+    "terminal.integrated.defaultProfile.osx": "zsh",
+    "[vue]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": true,
+    "editor.formatOnType": false,
+    "javascript.updateImportsOnFileMove.enabled": "always",
+    "typescript.updateImportsOnFileMove.enabled": "always",
+    "vsicons.dontShowNewVersionMessage": true,
+    "gitlens.advanced.messages": {
+        "suppressGitVersionWarning": true
+    },
+    "gitlens.codeLens.dateFormat": "yyyy-MM-dd HH:mm:ss",
+    "gitlens.advanced.repositorySearchDepth": 1,
+    "editor.fontSize": 15,
+    "diffEditor.codeLens": true,
+    "window.autoDetectColorScheme": false,
+    "merge-conflict.autoNavigateNextConflict.enabled": true,
+    "docthis.dateTagFormat": "yyyy-mm-dd",
+}
