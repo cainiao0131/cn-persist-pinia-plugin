@@ -1,4 +1,4 @@
-import { createCnPersistPiniaPlugin } from './plugin'
+import { createCnPersistPiniaPlugin } from './plugin';
 
 export {
   type CnPersistFactoryOptions,
@@ -6,7 +6,7 @@ export {
   type CnStateDeserializer,
   type CnDeserializePostHandler,
   type StorageLike,
-} from './types'
+} from './types';
 
-export { createCnPersistPiniaPlugin }
-export default createCnPersistPiniaPlugin()
+export { createCnPersistPiniaPlugin };
+export default createCnPersistPiniaPlugin();

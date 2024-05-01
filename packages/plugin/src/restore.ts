@@ -1,8 +1,8 @@
 import { getPersistHashKey } from './util';
-import { CnStatePersistContext } from './types';
+import type { CnStatePersistContext } from './types';
 
 // 恢复 string 类型的持久化数据
-export const restoreString = (stringValue: string, statePersistContext: CnStatePersistContext) => {
+export function restoreString(stringValue: string, statePersistContext: CnStatePersistContext) {
   const {
     stateKey,
     statePersistOptions: { deserialize },
@@ -12,10 +12,10 @@ export const restoreString = (stringValue: string, statePersistContext: CnStateP
   if (value_ != null) {
     storeState[stateKey] = value_;
   }
-};
+}
 
 // 恢复 hash 类型的持久化数据
-export const restoreHash = (
+export function restoreHash(
   stringValue: string,
   {
     stateKey,
@@ -23,7 +23,7 @@ export const restoreHash = (
     statePersistOptions: { deserialize, deserializePostHandler },
     storePersistContext: { storage, storeState },
   }: CnStatePersistContext,
-) => {
+) {
   const hashValue: Record<string, unknown> = {};
   const hashKeys: Array<string> = JSON.parse(stringValue);
   hashKeys.forEach(hashKey => {
@@ -36,4 +36,4 @@ export const restoreHash = (
     }
   });
   storeState[stateKey] = deserializePostHandler!(hashValue);
-};
+}

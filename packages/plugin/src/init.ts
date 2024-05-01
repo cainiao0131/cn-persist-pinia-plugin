@@ -1,23 +1,23 @@
 import { toRaw } from 'vue';
-import { StateTree, Store, _ActionsTree, _GettersTree, _Method } from 'pinia';
-import { CnStatePersistContext, CnStorePersistContext, ListenerPersister, StateKeyType } from './types';
+import type { StateTree, Store, _ActionsTree, _GettersTree, _Method } from 'pinia';
+import type { CnStatePersistContext, CnStorePersistContext, ListenerPersister, StateKeyType } from './types';
 import { capitalize, isObject } from './util';
 import { emitPersistEvent, produceListenerPersister } from './persist';
 import { restoreHash, restoreString } from './restore';
 
 const HSET_PREFIX = 'hsetAndPersist';
-const getHsetActionName = (stateKey: string) => {
+function getHsetActionName(stateKey: string) {
   return `${HSET_PREFIX}${capitalize(stateKey)}`;
-};
+}
 
-export const registerPersister = (
+export function registerPersister(
   mutationPersisterRegistry: Map<StateKeyType, ListenerPersister>,
   mutationObjectPersisterRegistry: Map<object, ListenerPersister>,
   mutationObjectPersisterUtil: Map<StateKeyType, object>,
   actionPersisterRegistry: Map<string, ListenerPersister>,
   actions: _ActionsTree,
   statePersistContext: CnStatePersistContext,
-) => {
+) {
   const {
     stateKey,
     statePersistOptions: { policy },
@@ -63,9 +63,9 @@ export const registerPersister = (
 
     mutationPersisterRegistry.set(stateKey, produceListenerPersister('STRING', statePersistContext));
   }
-};
+}
 
-export const initPersistOrRestore = (statePersistContext: CnStatePersistContext) => {
+export function initPersistOrRestore(statePersistContext: CnStatePersistContext) {
   const {
     stateKey,
     persistKey,
@@ -104,16 +104,16 @@ export const initPersistOrRestore = (statePersistContext: CnStatePersistContext)
         break;
     }
   }
-};
+}
 
-export const registerListener = (
+export function registerListener(
   store: Store<string, StateTree, _GettersTree<StateTree>, _ActionsTree>,
   mutationPersisterRegistry: Map<StateKeyType, ListenerPersister>,
   mutationObjectPersisterRegistry: Map<object, ListenerPersister>,
   mutationObjectPersisterUtil: Map<StateKeyType, object>,
   actionPersisterRegistry: Map<string, ListenerPersister>,
   { storeState }: CnStorePersistContext,
-) => {
+) {
   // 如果 mutation 持久化器注册中心不为空，则注册 mutation 监听器
   if (mutationPersisterRegistry.size > 0) {
     store.$subscribe(mutation => {
@@ -170,4 +170,4 @@ export const registerListener = (
       });
     });
   }
-};
+}

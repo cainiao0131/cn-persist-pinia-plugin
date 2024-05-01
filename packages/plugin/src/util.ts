@@ -1,6 +1,6 @@
 import { toRaw } from 'vue';
-import { StateTree } from 'pinia';
-import {
+import type { StateTree } from 'pinia';
+import type {
   CnDeserializePostHandler,
   CnPersistFactoryOptions,
   CnPersistOptions,
@@ -11,7 +11,7 @@ import {
   StateKeyType,
 } from './types';
 
-export const capitalize = (str: string) => {
+export function capitalize(str: string) {
   if (str.length < 1) {
     return '';
   }
@@ -19,10 +19,10 @@ export const capitalize = (str: string) => {
     return str[0].toUpperCase();
   }
   return str[0].toUpperCase() + str.slice(1);
-};
+}
 
 // 防抖
-export const debounce = <T>(fn: (arg: T) => void, timeout: number) => {
+export function debounce<T>(fn: (arg: T) => void, timeout: number) {
   let timer: NodeJS.Timeout;
   return (arg: T) => {
     if (timer) {
@@ -32,31 +32,31 @@ export const debounce = <T>(fn: (arg: T) => void, timeout: number) => {
       fn(arg);
     }, timeout);
   };
-};
+}
 
-export const getPersistKey = (storeId: string, stateName: StateKeyType): string => {
+export function getPersistKey(storeId: string, stateName: StateKeyType): string {
   return `cn-${storeId}-${String(stateName)}`;
-};
+}
 
-export const getPersistHashKey = (persistKey: string, hashKey: string): string => {
+export function getPersistHashKey(persistKey: string, hashKey: string): string {
   return `${persistKey}-${hashKey}`;
-};
+}
 
-export const isObject = (v: unknown) => {
+export function isObject(v: unknown) {
   return typeof v === 'object' && v !== null;
-};
+}
 
-export const isBoolean = (v: unknown) => {
+export function isBoolean(v: unknown) {
   return typeof v === 'boolean';
-};
+}
 
-export const getStateConverter = (cnPersist: CnPersistOptions<StateTree>, stateKey: StateKeyType) => {
+export function getStateConverter(cnPersist: CnPersistOptions<StateTree>, stateKey: StateKeyType) {
   const stateConverters_ = cnPersist.states;
   if (!stateConverters_) {
     return undefined;
   }
   return stateConverters_[stateKey];
-};
+}
 
 export const DEFAULT_STATE_SERIALIZER: CnStateSerializer = (newValue: unknown) =>
   newValue ? JSON.stringify(newValue) : '';
@@ -77,10 +77,10 @@ export const DEFAULT_DESERIALIZE_POST_HANDLER: CnDeserializePostHandler = (newVa
  * @param factoryOptions 全局选项
  * @returns 代理对象，表示合并后的选项
  */
-export const mixOptions = (
+export function mixOptions(
   options: boolean | CnPersistOptions<StateTree>,
   factoryOptions: CnPersistFactoryOptions,
-): CnPersistOptions<StateTree> => {
+): CnPersistOptions<StateTree> {
   options = isObject(options) ? options : Object.create(null);
 
   return new Proxy(options as object, {
@@ -92,22 +92,22 @@ export const mixOptions = (
       return Reflect.get(target, key, receiver) || Reflect.get(factoryOptions, key, receiver);
     },
   });
-};
+}
 
-const getAllStatesWithEmptyOptions = (storeState: StateTree): CnPersistStates<StateTree> => {
+function getAllStatesWithEmptyOptions(storeState: StateTree): CnPersistStates<StateTree> {
   const result: Partial<CnPersistStates<StateTree>> = {};
   Object.keys(toRaw(storeState)).forEach(key => {
     result[key] = {};
   });
   return result as CnPersistStates<StateTree>;
-};
+}
 
-export const produceStorePersistContext = (
+export function produceStorePersistContext(
   factoryOptions: CnPersistFactoryOptions,
   storeId: string,
   storeState: StateTree,
   mixedPersistOptions: CnPersistOptions<StateTree>,
-): CnStorePersistContext | null => {
+): CnStorePersistContext | null {
   try {
     const {
       storage = localStorage,
@@ -129,4 +129,4 @@ export const produceStorePersistContext = (
     }
     return null;
   }
-};
+}

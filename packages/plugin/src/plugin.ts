@@ -1,5 +1,5 @@
-import { PiniaPluginContext } from 'pinia';
-import {
+import type { PiniaPluginContext } from 'pinia';
+import type {
   CnPersistFactoryOptions,
   CnStatePersistContext,
   CnStatePersistOptions,
@@ -17,7 +17,7 @@ import {
 } from './util';
 import { initPersistOrRestore, registerListener, registerPersister } from './init';
 
-export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
+export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptions = {}) {
   const { auto = false, globalDebounce = 500 } = factoryOptions;
 
   // 根据配置设置全局防抖延迟
@@ -98,7 +98,12 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
       const statePersistContext: CnStatePersistContext = {
         stateKey,
         persistKey,
-        statePersistOptions: { policy, serialize, deserialize, deserializePostHandler },
+        statePersistOptions: {
+          policy,
+          serialize,
+          deserialize,
+          deserializePostHandler,
+        },
         storePersistContext,
       };
 
@@ -150,4 +155,4 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
 
     return {};
   };
-};
+}

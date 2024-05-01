@@ -1,5 +1,5 @@
-import { PiniaPluginContext } from 'pinia';
-import { CnPersistType, CnPersistFactoryOptions } from './types';
+import type { PiniaPluginContext } from 'pinia';
+import type { CnPersistFactoryOptions, CnPersistType } from './types';
 import { getPersistKey, getStateSerializer } from './util';
 import { emitPersistEvent, produceActionPersister, setGlobalDebounce } from './persist';
 import { restoreHash, restoreString } from './restore';
@@ -30,14 +30,14 @@ const actionPrefixToPersistType: Record<string, CnPersistType> = {
   [HRESET_PREFIX]: 'HASH_RESET',
 };
 
-const getStateKey = (actionName: string, prefix: string) => {
+function getStateKey(actionName: string, prefix: string) {
   const stateKey_ = actionName.substring(prefix.length);
   return stateKey_ ? stateKey_.charAt(0).toLowerCase() + stateKey_.substring(1) : '';
-};
+}
 
 declare type ActionListenerPersisterRegistry = Record<string, (args: Array<unknown>) => void>;
 
-export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
+export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptions = {}) {
   const { auto = false } = factoryOptions;
   const globalDebounce = factoryOptions.globalDebounce;
   if (globalDebounce && globalDebounce > 0) {
@@ -138,4 +138,4 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
 
     return {};
   };
-};
+}

@@ -61,11 +61,11 @@ export interface CnStateConverter {
 
 export type CnPersistType = 'STRING' | 'HASH' | 'HASH_RESET';
 
-export type CnPersistEvent = {
+export interface CnPersistEvent {
   type: CnPersistType;
   newValue: unknown;
   stateSerializer: CnStateSerializer;
-};
+}
 
 declare module 'pinia' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

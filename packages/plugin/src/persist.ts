@@ -1,5 +1,5 @@
-import { CnPersistEvent, CnPersistEventType, CnStatePersistContext } from './types';
-import { getPersistHashKey, debounce } from './util';
+import type { CnPersistEvent, CnPersistEventType, CnStatePersistContext } from './types';
+import { debounce, getPersistHashKey } from './util';
 
 /**
  * 对持久化操作进行防抖，整体防抖，而不是为每个模块或字段防抖
@@ -16,7 +16,7 @@ let persistBuffer: Record<string, CnPersistEvent> = {};
 /**
  * 持久化器，持久化逻辑的实现
  */
-const persist = (statePersistContext: CnStatePersistContext) => {
+function persist(statePersistContext: CnStatePersistContext) {
   Object.entries(persistBuffer).forEach(([persistKey, cnPersistEvent]) => {
     switch (cnPersistEvent.type) {
       case 'STRING':
@@ -33,19 +33,19 @@ const persist = (statePersistContext: CnStatePersistContext) => {
     }
   });
   persistBuffer = {};
-};
+}
 
 /**
  * 防抖持久化器的工厂
  * 使用工厂模式，以便可以自定义全局防抖延迟
  * globalDebounce 小于等于 0 时，禁用防抖
  */
-const produceDebouncedPersister = (globalDebounce: number) => {
+function produceDebouncedPersister(globalDebounce: number) {
   if (globalDebounce <= 0) {
     return persist;
   }
   return debounce(persist, globalDebounce);
-};
+}
 
 /**
  * 调用已经设置了延迟时间的防抖持久化方法，默认延迟半秒
@@ -58,17 +58,17 @@ let debouncedPersist = produceDebouncedPersister(500);
  * @param persistKey 持久化 key，即 storage 的 key
  * @param cnPersistEvent 持久化事件，封装了：持久化类型、持久化数据，以及序列化器
  */
-const persistString = (
+function persistString(
   persistKey: string,
   { stateSerializer, newValue }: CnPersistEvent,
   { storePersistContext: { storage } }: CnStatePersistContext,
-) => {
+) {
   const persistValue = stateSerializer(newValue);
   if (persistValue == null) {
     return;
   }
   storage.setItem(persistKey, persistValue);
-};
+}
 
 /**
  * hash 类型的 Entry 持久化逻辑，即对 Record 类型的 state 的一个 Entry 进行持久化
@@ -76,11 +76,11 @@ const persistString = (
  * @param persistKey 持久化 key，即 storage 的 key
  * @param cnPersistEvent 持久化事件，封装了：持久化类型、Entry 的 Value，以及序列化器（针对单个 Entry 的 Value）
  */
-const persistHash = (
+function persistHash(
   persistKey: string,
   { stateSerializer, newValue }: CnPersistEvent,
   { storePersistContext: { storage } }: CnStatePersistContext,
-) => {
+) {
   const hashValue: Record<string, unknown> = newValue as Record<string, unknown>;
   const hashKeysString = storage.getItem(persistKey);
   const hashKeySet = hashKeysString ? new Set(JSON.parse(hashKeysString)) : new Set();
@@ -92,7 +92,7 @@ const persistHash = (
     }
   });
   storage.setItem(persistKey, JSON.stringify(Array.from(hashKeySet)));
-};
+}
 
 /**
  * hash 类型的整体持久化逻辑，对 Record 类型的 state 的所有 Entry 逐个进行持久化
@@ -102,11 +102,11 @@ const persistHash = (
  * @param persistKey 持久化 key，即 storage 的 key
  * @param cnPersistEvent 持久化事件，封装了：持久化类型、整个 Record 的值，以及序列化器（针对单个 Entry 的 Value）
  */
-const persistHashReset = (
+function persistHashReset(
   persistKey: string,
   { stateSerializer, newValue }: CnPersistEvent,
   { storePersistContext: { storage } }: CnStatePersistContext,
-) => {
+) {
   const hashValue: Record<string, unknown> = newValue as Record<string, unknown>;
   const oldHashKeysString = storage.getItem(persistKey);
   // 待删除的旧 Entry
@@ -126,7 +126,7 @@ const persistHashReset = (
     storage.removeItem(getPersistHashKey(persistKey, oldHashKeyToDelete));
   });
   storage.setItem(persistKey, JSON.stringify(Array.from(hashKeySet)));
-};
+}
 
 /**
  * 触发持久化事件
@@ -134,34 +134,34 @@ const persistHashReset = (
  * 然后调用防抖持久化方法
  * 序列化与持久化，在防抖后执行
  */
-export const emitPersistEvent = (
+export function emitPersistEvent(
   type: CnPersistEventType,
   newValue: unknown,
   statePersistContext: CnStatePersistContext,
-) => {
+) {
   const {
     persistKey,
     statePersistOptions: { serialize },
   } = statePersistContext;
   persistBuffer[persistKey] = { type, newValue, stateSerializer: serialize! };
   debouncedPersist(statePersistContext);
-};
+}
 
 /**
  * 自定义全局延迟时间
  */
-export const setGlobalDebounce = (globalDebounce: number) => {
+export function setGlobalDebounce(globalDebounce: number) {
   debouncedPersist = produceDebouncedPersister(globalDebounce);
-};
+}
 
 /**
  * Action 持久化器的工厂
  * 根据持久化类型，生产 Action 持久化器
  */
-export const produceListenerPersister = (
+export function produceListenerPersister(
   type: CnPersistEventType,
   statePersistContext: CnStatePersistContext,
-): ((args: Array<unknown>) => void) => {
+): (args: Array<unknown>) => void {
   const { persistKey } = statePersistContext;
 
   console.log('');
@@ -198,4 +198,4 @@ export const produceListenerPersister = (
         emitPersistEvent(type, args[0], statePersistContext);
       };
   }
-};
+}

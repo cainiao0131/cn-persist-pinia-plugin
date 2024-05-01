@@ -1,4 +1,4 @@
-import { StateTree } from 'pinia';
+import type { StateTree } from 'pinia';
 
 export type StateKeyType = string | number | symbol;
 
@@ -12,7 +12,9 @@ type Prettify<T> = { [K in keyof T]: T[K] };
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-export type CnPersistStates<S extends StateTree> = { [K in keyof S]?: CnStatePersistOptions };
+export type CnPersistStates<S extends StateTree> = {
+  [K in keyof S]?: CnStatePersistOptions;
+};
 
 export interface CnPersistOptions<S extends StateTree> {
   /**
@@ -121,11 +123,11 @@ export interface CnStatePersistOptions {
  */
 export type CnPersistEventType = 'STRING' | 'HASH' | 'HASH_RESET';
 
-export type CnPersistEvent = {
+export interface CnPersistEvent {
   type: CnPersistEventType;
   newValue: unknown;
   stateSerializer: CnStateSerializer;
-};
+}
 
 declare module 'pinia' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
