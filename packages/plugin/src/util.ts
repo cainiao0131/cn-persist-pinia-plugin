@@ -37,8 +37,8 @@ export const debounce = <T>(fn: (arg: T) => void, timeout: number) => {
   };
 };
 
-export const getPersistKey = (storeId: string, stateName: StateKeyType): string => {
-  return `cn-${storeId}-${String(stateName)}`;
+export const getPersistKey = (storeId: string, stateKey: StateKeyType): string => {
+  return `cn-${storeId}-${String(stateKey)}`;
 };
 
 export const getPersistHashKey = (persistKey: string, hashKey: string): string => {
