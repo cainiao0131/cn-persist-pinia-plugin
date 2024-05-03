@@ -1,5 +1,5 @@
-import type { PiniaPluginContext } from 'pinia';
-import type {
+import { PiniaPluginContext } from 'pinia';
+import {
   CnPersistFactoryOptions,
   CnStatePersistContext,
   CnStatePersistOptions,
@@ -7,17 +7,10 @@ import type {
   StateKeyType,
 } from './types';
 import { setGlobalDebounce } from './persist';
-import {
-  DEFAULT_DESERIALIZE_POST_HANDLER,
-  DEFAULT_STATE_DESERIALIZER,
-  DEFAULT_STATE_SERIALIZER,
-  getPersistKey,
-  mixOptions,
-  produceStorePersistContext,
-} from './util';
+import { getPersistKey, mixOptions, produceStatePersistContext, produceStorePersistContext } from './util';
 import { initPersistOrRestore, registerListener, registerPersister } from './init';
 
-export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptions = {}) {
+export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
   const { auto = false, globalDebounce = 500 } = factoryOptions;
 
   // 根据配置设置全局防抖延迟
@@ -54,12 +47,8 @@ export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptio
     const storeState = store.$state;
 
     // 创建 store 上下文
-    const storePersistContext = produceStorePersistContext(
-      factoryOptions,
-      storeId,
-      storeState,
-      mixOptions(cnPersist, factoryOptions),
-    );
+    const mixedPersistOptions = mixOptions(cnPersist, factoryOptions);
+    const storePersistContext = produceStorePersistContext(factoryOptions, storeId, storeState, mixedPersistOptions);
 
     // produceStorePersistContext 中抛异常时会返回 null，此时会忽略当前 store，继续配置别的 store
     if (!storePersistContext) {
@@ -79,9 +68,11 @@ export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptio
      * states 的类型拥有所有 state 的 key
      * 这里过滤掉那些没有值的 key
      */
-    const stateOptionsEntries: Array<[string, CnStatePersistOptions]> = Object.entries(states).filter(entry => {
-      return !!entry[1];
-    }) as Array<[string, CnStatePersistOptions]>;
+    const stateOptionsEntries: Array<[string, CnStatePersistOptions<unknown>]> = Object.entries(states).filter(
+      entry => {
+        return !!entry[1];
+      },
+    ) as Array<[string, CnStatePersistOptions<unknown>]>;
 
     // 遍历当前 store 中的每个配置了持久化的 state key
     stateOptionsEntries.forEach(([stateKey, statePersistOptions]) => {
@@ -89,23 +80,17 @@ export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptio
       const persistKey = getPersistKey(key, stateKey);
 
       // 创建 state 上下文
-      const {
-        policy = 'STRING',
-        serialize = DEFAULT_STATE_SERIALIZER,
-        deserialize = DEFAULT_STATE_DESERIALIZER,
-        deserializePostHandler = DEFAULT_DESERIALIZE_POST_HANDLER,
-      } = statePersistOptions;
-      const statePersistContext: CnStatePersistContext = {
+      const statePersistContext: CnStatePersistContext<unknown> | null = produceStatePersistContext(
         stateKey,
         persistKey,
-        statePersistOptions: {
-          policy,
-          serialize,
-          deserialize,
-          deserializePostHandler,
-        },
+        statePersistOptions,
+        mixedPersistOptions,
         storePersistContext,
-      };
+      );
+      // produceStatePersistContext 中抛异常时会返回 null，此时会忽略当前 state，继续配置别的 state
+      if (!statePersistContext) {
+        return;
+      }
 
       /**
        * 为当前 store 中的每个配置了持久化的 state，注册持久化器
@@ -155,4 +140,4 @@ export function createCnPersistPiniaPlugin(factoryOptions: CnPersistFactoryOptio
 
     return {};
   };
-}
+};

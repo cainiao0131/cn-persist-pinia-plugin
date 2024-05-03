@@ -1,23 +1,23 @@
 import { toRaw } from 'vue';
-import type { StateTree, Store, _ActionsTree, _GettersTree, _Method } from 'pinia';
-import type { CnStatePersistContext, CnStorePersistContext, ListenerPersister, StateKeyType } from './types';
+import { StateTree, Store, _ActionsTree, _GettersTree, _Method } from 'pinia';
+import { CnStatePersistContext, CnStorePersistContext, ListenerPersister, StateKeyType } from './types';
 import { capitalize, isObject } from './util';
 import { emitPersistEvent, produceListenerPersister } from './persist';
 import { restoreHash, restoreString } from './restore';
 
 const HSET_PREFIX = 'hsetAndPersist';
-function getHsetActionName(stateKey: string) {
+const getHsetActionName = (stateKey: string) => {
   return `${HSET_PREFIX}${capitalize(stateKey)}`;
-}
+};
 
-export function registerPersister(
+export const registerPersister = (
   mutationPersisterRegistry: Map<StateKeyType, ListenerPersister>,
   mutationObjectPersisterRegistry: Map<object, ListenerPersister>,
   mutationObjectPersisterUtil: Map<StateKeyType, object>,
   actionPersisterRegistry: Map<string, ListenerPersister>,
   actions: _ActionsTree,
-  statePersistContext: CnStatePersistContext,
-) {
+  statePersistContext: CnStatePersistContext<unknown>,
+) => {
   const {
     stateKey,
     statePersistOptions: { policy },
@@ -57,36 +57,21 @@ export function registerPersister(
     }
     mutationPersisterRegistry.set(stateKey, produceListenerPersister('HASH_RESET', statePersistContext));
   } else {
-    console.log('');
-    console.log('registerPersister >>> stateKey =', stateKey);
-    console.log('registerPersister >>> policy =', policy);
-
     mutationPersisterRegistry.set(stateKey, produceListenerPersister('STRING', statePersistContext));
   }
-}
+};
 
-export function initPersistOrRestore(statePersistContext: CnStatePersistContext) {
+export const initPersistOrRestore = (statePersistContext: CnStatePersistContext<unknown>) => {
   const {
     stateKey,
     persistKey,
     statePersistOptions: { policy },
     storePersistContext: { storage, storeState },
   } = statePersistContext;
-  console.log('');
-  console.log('initPersistOrRestore >>> stateKey =', stateKey);
-  console.log('initPersistOrRestore >>> persistKey =', persistKey);
-  console.log('initPersistOrRestore >>> policy =', policy);
-
   const stringValue = storage.getItem(persistKey);
-
-  console.log('initPersistOrRestore >>> stringValue =', stringValue);
-
   if (!stringValue) {
     // 如果持久化数据不存在，则检查 state 是否有初始值，如果有则对初始值进行持久化
     const initValue = storeState[stateKey];
-
-    console.log('initPersistOrRestore >>> initValue =', initValue);
-
     if (initValue) {
       emitPersistEvent(policy == 'STRING' ? 'STRING' : 'HASH_RESET', initValue, statePersistContext);
     }
@@ -104,16 +89,16 @@ export function initPersistOrRestore(statePersistContext: CnStatePersistContext)
         break;
     }
   }
-}
+};
 
-export function registerListener(
+export const registerListener = (
   store: Store<string, StateTree, _GettersTree<StateTree>, _ActionsTree>,
   mutationPersisterRegistry: Map<StateKeyType, ListenerPersister>,
   mutationObjectPersisterRegistry: Map<object, ListenerPersister>,
   mutationObjectPersisterUtil: Map<StateKeyType, object>,
   actionPersisterRegistry: Map<string, ListenerPersister>,
   { storeState }: CnStorePersistContext,
-) {
+) => {
   // 如果 mutation 持久化器注册中心不为空，则注册 mutation 监听器
   if (mutationPersisterRegistry.size > 0) {
     store.$subscribe(mutation => {
@@ -170,4 +155,4 @@ export function registerListener(
       });
     });
   }
-}
+};

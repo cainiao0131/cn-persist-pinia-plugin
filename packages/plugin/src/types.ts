@@ -1,4 +1,6 @@
-import type { StateTree } from 'pinia';
+import { StateTree } from 'pinia';
+
+export type CnKeyFilter<T> = { [K in keyof T]?: CnKeyFilter<T[K]> | true };
 
 export type StateKeyType = string | number | symbol;
 
@@ -12,9 +14,7 @@ type Prettify<T> = { [K in keyof T]: T[K] };
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-export type CnPersistStates<S extends StateTree> = {
-  [K in keyof S]?: CnStatePersistOptions;
-};
+export type CnPersistStates<S extends StateTree> = { [K in keyof S]?: CnStatePersistOptions<S[K]> };
 
 export interface CnPersistOptions<S extends StateTree> {
   /**
@@ -73,12 +73,12 @@ export interface CnStorePersistContext {
   storeState: StateTree;
 }
 /**
- * state 域的上下文
+ * state 域的上下文，T 为当前 state 的类型
  */
-export interface CnStatePersistContext {
+export interface CnStatePersistContext<T> {
   stateKey: string;
   persistKey: string;
-  statePersistOptions: CnStatePersistOptions;
+  statePersistOptions: CnStatePersistOptions<T>;
   storePersistContext: CnStorePersistContext;
 }
 
@@ -86,8 +86,35 @@ export type CnStateSerializer = (newValue: unknown) => string | null;
 export type CnStateDeserializer = (persistedValue: string) => unknown | null;
 export type CnDeserializePostHandler = (newValue: unknown) => unknown | null;
 export type CnPersistPolicy = 'STRING' | 'HASH';
-export interface CnStatePersistOptions {
+/**
+ * 为每个 state 进行配置的配置项类型，T 为正在配置的 state 的类型
+ */
+export interface CnStatePersistOptions<T> {
   policy?: CnPersistPolicy;
+  /**
+   * 仅配置了 includes 时，只持久化 includes 中配置了的字段，
+   * 关于 includes 与 excludes 的其它说明，见：{@link CnStatePersistOptions.excludes}
+   */
+  includes?: CnKeyFilter<T>;
+  /**
+   * 仅配置了 excludes 时，持久化时会从对象中剔除 excludes 中配置的字段，
+   *
+   * 如果同时配置了 includes 与 excludes，
+   * 则本质上配置的是 includes，只是这个 includes 是用户配置的 includes 减去 excludes 的差集，
+   * 即只会持久化 includes 减去 excludes 的差集，
+   * 不推荐这样配置，建议仅配置 includes 或 excludes 中的一个
+   *
+   * 关于 includes 与 excludes 的其它说明：
+   *
+   * 当 policy 为 HASH 时，
+   * includes 与 excludes 针对的不是整个 Record<key, value> 对象，而是针对的 Record 的 value
+   * 因为 Record 的特点是 key 的值是动态而不确定的，因此不适合配置到 includes 或 excludes 中
+   * 而通常 Record 的 value 的类型是固定的，可以对其配置 excludes 与 includes
+   *
+   * 插件会先处理 includes 与 excludes，然后再调用 serialize
+   * 即用户在自定义的 serialize 中拿到的对象，是已经修剪后的
+   */
+  excludes?: CnKeyFilter<T>;
   /**
    * 持久化类型，类似 Redis 的字符串类型与哈希类型
    * STRING：
@@ -123,11 +150,11 @@ export interface CnStatePersistOptions {
  */
 export type CnPersistEventType = 'STRING' | 'HASH' | 'HASH_RESET';
 
-export interface CnPersistEvent {
+export type CnPersistEvent = {
   type: CnPersistEventType;
   newValue: unknown;
   stateSerializer: CnStateSerializer;
-}
+};
 
 declare module 'pinia' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
