@@ -1,6 +1,20 @@
 import { getPersistHashKey } from './util';
 import { CnStatePersistContext } from './types';
 
+export const restoreFromStoreValue = (storageValue: string, statePersistContext: CnStatePersistContext<unknown>) => {
+  const {
+    statePersistOptions: { policy },
+  } = statePersistContext;
+  switch (policy) {
+    case 'STRING':
+      restoreString(storageValue, statePersistContext);
+      break;
+    case 'HASH':
+      restoreHash(storageValue, statePersistContext);
+      break;
+  }
+};
+
 // 恢复 string 类型的持久化数据
 export const restoreString = (stringValue: string, statePersistContext: CnStatePersistContext<unknown>) => {
   const {
