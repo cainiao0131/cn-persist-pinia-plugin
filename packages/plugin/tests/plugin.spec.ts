@@ -148,5 +148,41 @@ describe('globalDebounce: 0', () => {
         expect(localStorage.getItem).toHaveBeenCalledWith(PERSIST_KEY);
       });
     });
+
+    describe('w/ key', () => {
+      const CUSTOM_KEY = 'mock';
+      const CUSTOM_PERSIST_KEY = getPersistKey(CUSTOM_KEY, STATE_KEY);
+
+      const useStore = defineStore(STORE_ID, {
+        state: () => ({ [STATE_KEY]: {} }),
+        cnPersist: { key: CUSTOM_KEY },
+      });
+
+      it('persists store in localStorage under given key', async () => {
+        //* arrange
+        const store = useStore();
+
+        //* act
+        store[STATE_KEY] = STATE_VALUE;
+        await nextTick();
+
+        //* assert
+        expect(readLocalStoage(CUSTOM_PERSIST_KEY)).toEqual(STATE_VALUE);
+        expect(localStorage.setItem).toHaveBeenCalledWith(CUSTOM_PERSIST_KEY, JSON.stringify(STATE_VALUE));
+      });
+
+      it('rehydrates store from localStorage under given key', async () => {
+        //* arrange
+        initializeLocalStorage(CUSTOM_PERSIST_KEY, STATE_VALUE);
+
+        //* act
+        await nextTick();
+        const store = useStore();
+
+        //* assert
+        expect(store[STATE_KEY]).toEqual(STATE_VALUE);
+        expect(localStorage.getItem).toHaveBeenCalledWith(CUSTOM_PERSIST_KEY);
+      });
+    });
   });
 });
