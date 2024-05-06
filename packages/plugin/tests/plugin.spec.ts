@@ -184,5 +184,39 @@ describe('globalDebounce: 0', () => {
         expect(localStorage.getItem).toHaveBeenCalledWith(CUSTOM_PERSIST_KEY);
       });
     });
+
+    describe('w/ key function', () => {
+      const CUSTOM_PERSIST_KEY = getPersistKey(`saved-${STORE_ID}`, STATE_KEY);
+      const useStore = defineStore(STORE_ID, {
+        state: () => ({ [STATE_KEY]: {} }),
+        cnPersist: { key: id => `saved-${id}` },
+      });
+
+      it('persists store in localStorage under given function key', async () => {
+        //* arrange
+        const store = useStore();
+
+        //* act
+        store[STATE_KEY] = STATE_VALUE;
+        await nextTick();
+
+        //* assert
+        expect(readLocalStoage(CUSTOM_PERSIST_KEY)).toEqual(STATE_VALUE);
+        expect(localStorage.setItem).toHaveBeenCalledWith(CUSTOM_PERSIST_KEY, JSON.stringify(STATE_VALUE));
+      });
+
+      it('rehydrates store from localStorage under given function key', async () => {
+        //* arrange
+        initializeLocalStorage(CUSTOM_PERSIST_KEY, STATE_VALUE);
+
+        //* act
+        await nextTick();
+        const store = useStore();
+
+        //* assert
+        expect(store[STATE_KEY]).toEqual(STATE_VALUE);
+        expect(localStorage.getItem).toHaveBeenCalledWith(CUSTOM_PERSIST_KEY);
+      });
+    });
   });
 });
