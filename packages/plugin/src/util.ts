@@ -1,4 +1,4 @@
-import { toRaw } from 'vue';
+import { toRaw, isRef, type Ref } from 'vue';
 import { StateTree } from 'pinia';
 import {
   CnDeserializePostHandler,
@@ -37,8 +37,8 @@ export const debounce = <T>(fn: (arg: T) => void, timeout: number) => {
   };
 };
 
-export const getPersistKey = (storeId: string, stateKey: StateKeyType): string => {
-  return `cn-${storeId}-${String(stateKey)}`;
+export const getPersistKey = (storeId: string, stateName: StateKeyType): string => {
+  return `cn-${storeId}-${String(stateName)}`;
 };
 
 export const getPersistHashKey = (persistKey: string, hashKey: string): string => {
@@ -177,11 +177,17 @@ export const produceStatePersistContext = (
   storePersistContext: CnStorePersistContext,
 ): CnStatePersistContext<unknown> | null => {
   try {
+    const { storeState } = storePersistContext;
     const {
       policy = 'STRING',
       deserialize = DEFAULT_STATE_DESERIALIZER,
       deserializePostHandler = DEFAULT_DESERIALIZE_POST_HANDLER,
     } = statePersistOptions;
+    /**
+     * 这里必须对 storeState 调用 toRaw()，因为 storeState 是代理，其 setter 被动了手脚，
+     * 在 setup 配置 pinia 的情况下，storeState[stateKey] 拿到的不是 Ref，而是 Ref.value 的值
+     */
+    const stateValue: unknown | Ref<unknown> = toRaw(storeState)[stateKey];
     return {
       stateKey,
       persistKey,
@@ -192,6 +198,8 @@ export const produceStatePersistContext = (
         deserializePostHandler,
       },
       storePersistContext,
+      isSetup: isRef(stateValue),
+      stateValue,
     };
   } catch (e) {
     if (mixedPersistOptions.debug) {

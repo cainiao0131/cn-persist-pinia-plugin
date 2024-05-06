@@ -1,3 +1,4 @@
+import { type Ref } from 'vue';
 import { StateTree } from 'pinia';
 
 export type CnKeyFilter<T> = { [K in keyof T]?: CnKeyFilter<T[K]> | true };
@@ -80,6 +81,8 @@ export interface CnStatePersistContext<T> {
   persistKey: string;
   statePersistOptions: CnStatePersistOptions<T>;
   storePersistContext: CnStorePersistContext;
+  isSetup: boolean;
+  stateValue: unknown | Ref<unknown>;
 }
 
 export type CnStateSerializer = (newValue: unknown) => string | null;
@@ -160,5 +163,21 @@ declare module 'pinia' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   export interface DefineStoreOptionsBase<S extends StateTree, Store> {
     cnPersist?: boolean | CnPersistOptions<S>;
+  }
+
+  export interface PiniaCustomProperties {
+    /**
+     * Rehydrates store from persisted state
+     *
+     * Warning: this is for advances usecases, make sure you know what you're doing.
+     */
+    $hydrate: () => void;
+
+    /**
+     * Persists store into configured storage
+     *
+     * Warning: this is for advances usecases, make sure you know what you're doing.
+     */
+    $persist: () => void;
   }
 }

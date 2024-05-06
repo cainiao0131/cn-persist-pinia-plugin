@@ -1,3 +1,4 @@
+import { type Ref } from 'vue';
 import { PiniaPluginContext } from 'pinia';
 import {
   CnPersistFactoryOptions,
@@ -68,25 +69,25 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
      * 运行时以 state key 为 key 从注册中心获取持久化器，
      * 注册中心由 mutation 监听器使用
      */
-    const stateKeyPersisterRegistry: Map<StateKeyType, ListenerPersister> = new Map();
+    const stateKeyPersisterRegistry: Map<StateKeyType | Ref<unknown>, ListenerPersister> = new Map();
     /**
-     * 仅当持久化策略为 HASH，且用户没有配置对应的 Action 时，不得已才会注册 stateObjectPersisterRegistry（不推荐），
+     * 仅当持久化策略为 HASH，且用户没有配置对应的 Action 时，不得已才会注册 hashTargetObjectPersisterRegistry（不推荐），
      * 推荐为 HASH 持久化策略配置符合命名规范的 Action
      *
      * 注册 state object 持久化器，以 state 对象的字段的粒度进行变化监听与持久化，
      * 运行时以 state 对象（即 mutation 事件的 target 对象）为 key 从注册中心获取持久化器，
      * 注册中心由 mutation 监听器使用
      */
-    const stateObjectPersisterRegistry: Map<object, ListenerPersister> = new Map();
-    const stateObjectPersisterUtil: Map<StateKeyType, object> = new Map();
+    const hashTargetObjectPersisterRegistry: Map<unknown, ListenerPersister> = new Map();
+    const hashTargetObjectPersisterUtil: Map<StateKeyType | Ref<unknown>, unknown> = new Map();
     /**
-     * 仅当持久化策略为 HASH，且用户配置了对应的 Action 时，才会注册 hasKeyPersisterRegistry（HASH 策略推荐配置方式）
+     * 仅当持久化策略为 HASH，且用户配置了对应的 Action 时，才会注册 actionNamePersisterRegistry（HASH 策略推荐配置方式）
      *
      * 注册 hash key 持久化器，以 state 对象的字段的粒度进行监听与持久化，
      * 运行时以 Action 名称为 key 从注册中心获取持久化器，
      * 目前只能通过监听 Action 才能在运行时以 O(1) 拿到 hash key，因此注册器由 Action 监听器使用
      */
-    const hasKeyPersisterRegistry: Map<string, ListenerPersister> = new Map();
+    const actionNamePersisterRegistry: Map<string, ListenerPersister> = new Map();
 
     /**
      * 为了方便用户配置 states 时能利用 typescript 自动根据 state 补全 state key，
@@ -125,9 +126,9 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
        */
       registerPersister(
         stateKeyPersisterRegistry,
-        stateObjectPersisterRegistry,
-        stateObjectPersisterUtil,
-        hasKeyPersisterRegistry,
+        hashTargetObjectPersisterRegistry,
+        hashTargetObjectPersisterUtil,
+        actionNamePersisterRegistry,
         actions,
         statePersistContext,
       );
@@ -145,9 +146,9 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
     registerListener(
       store,
       stateKeyPersisterRegistry,
-      stateObjectPersisterRegistry,
-      stateObjectPersisterUtil,
-      hasKeyPersisterRegistry,
+      hashTargetObjectPersisterRegistry,
+      hashTargetObjectPersisterUtil,
+      actionNamePersisterRegistry,
       storePersistContext,
     );
 

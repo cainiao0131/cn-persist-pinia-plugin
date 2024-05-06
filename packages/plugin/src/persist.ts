@@ -14,7 +14,7 @@ const produceDebouncedPersister = (globalDebounce: number) => {
 };
 
 let debouncedPersist = (statePersistContext: CnStatePersistContext<unknown>) => {
-  console.log(statePersistContext);
+  console.warn('debouncedPersist is not initialized >>> statePersistContext =', statePersistContext);
 };
 
 /**
