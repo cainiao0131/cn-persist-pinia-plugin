@@ -64,7 +64,6 @@ export type CnPersistFactoryOptions = Prettify<
  * store 域的上下文
  */
 export interface CnStorePersistContext {
-  storage: StorageLike;
   /**
    * 当前 store 的所有持久化数据的 storage key 前缀
    */
@@ -83,6 +82,7 @@ export interface CnStatePersistContext<T> {
   storePersistContext: CnStorePersistContext;
   isSetup: boolean;
   stateValue: unknown | Ref<unknown>;
+  storage: StorageLike;
 }
 
 export type CnStateSerializer = (newValue: unknown) => string | null;
@@ -94,6 +94,7 @@ export type CnPersistPolicy = 'STRING' | 'HASH';
  */
 export interface CnStatePersistOptions<T> {
   policy?: CnPersistPolicy;
+  storage?: StorageLike;
   /**
    * 仅配置了 includes 时，只持久化 includes 中配置了的字段，
    * 关于 includes 与 excludes 的其它说明，见：{@link CnStatePersistOptions.excludes}
@@ -156,7 +157,8 @@ export type CnPersistEventType = 'STRING' | 'HASH' | 'HASH_RESET';
 export type CnPersistEvent = {
   type: CnPersistEventType;
   newValue: unknown;
-  stateSerializer: CnStateSerializer;
+  serialize: CnStateSerializer;
+  storage: StorageLike;
 };
 
 declare module 'pinia' {

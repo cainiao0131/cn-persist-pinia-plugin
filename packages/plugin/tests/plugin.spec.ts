@@ -56,7 +56,7 @@ describe('globalDebounce: 0', () => {
 
     it('does not rehydrate store', async () => {
       //* arrange
-      initializeLocalStorage(PERSIST_KEY, STATE_VALUE);
+      initializeLocalStorage({ persistKey: PERSIST_KEY, value: STATE_VALUE });
 
       //* act
       await nextTick();
@@ -89,7 +89,7 @@ describe('globalDebounce: 0', () => {
 
     it('rehydrates store from localStorage', async () => {
       //* arrange
-      initializeLocalStorage(PERSIST_KEY, STATE_VALUE);
+      initializeLocalStorage({ persistKey: PERSIST_KEY, value: STATE_VALUE });
 
       //* act
       await nextTick();
@@ -137,7 +137,7 @@ describe('globalDebounce: 0', () => {
 
       it('rehydrates store from localStorage', async () => {
         //* arrange
-        initializeLocalStorage(PERSIST_KEY, STATE_VALUE);
+        initializeLocalStorage({ persistKey: PERSIST_KEY, value: STATE_VALUE });
 
         //* act
         await nextTick();
@@ -173,7 +173,7 @@ describe('globalDebounce: 0', () => {
 
       it('rehydrates store from localStorage under given key', async () => {
         //* arrange
-        initializeLocalStorage(CUSTOM_PERSIST_KEY, STATE_VALUE);
+        initializeLocalStorage({ persistKey: CUSTOM_PERSIST_KEY, value: STATE_VALUE });
 
         //* act
         await nextTick();
@@ -207,7 +207,7 @@ describe('globalDebounce: 0', () => {
 
       it('rehydrates store from localStorage under given function key', async () => {
         //* arrange
-        initializeLocalStorage(CUSTOM_PERSIST_KEY, STATE_VALUE);
+        initializeLocalStorage({ persistKey: CUSTOM_PERSIST_KEY, value: STATE_VALUE });
 
         //* act
         await nextTick();
@@ -216,6 +216,63 @@ describe('globalDebounce: 0', () => {
         //* assert
         expect(store[STATE_KEY]).toEqual(STATE_VALUE);
         expect(localStorage.getItem).toHaveBeenCalledWith(CUSTOM_PERSIST_KEY);
+      });
+    });
+
+    describe('w/ includes', () => {
+      const useStore = defineStore(STORE_ID, {
+        state: () => ({
+          [STATE_KEY]: {},
+          dolor: {
+            sit: '',
+            consectetur: {
+              adipiscing: '',
+            },
+          },
+        }),
+        cnPersist: {
+          states: { [STATE_KEY]: {}, dolor: { includes: { consectetur: { adipiscing: true } } } },
+        },
+      });
+
+      it('persists store includes in localStorage', async () => {
+        //* arrange
+        const store = useStore();
+
+        //* act
+        store[STATE_KEY] = STATE_VALUE;
+        store.dolor.sit = 'amet';
+        // TODO，更深入一层的 setter 的情况没有考虑到
+        store.dolor.consectetur.adipiscing = 'elit';
+        await nextTick();
+
+        //* assert
+        expect(readLocalStoage(PERSIST_KEY)).toEqual(STATE_VALUE);
+        const dolorPersistKey = getPersistKey(STORE_ID, 'dolor');
+        expect(readLocalStoage(dolorPersistKey)).toEqual({ consectetur: { adipiscing: 'elit' } });
+        expect(localStorage.setItem).toHaveBeenCalledWith(PERSIST_KEY, JSON.stringify(STATE_VALUE));
+        expect(localStorage.setItem).toHaveBeenCalledWith(
+          dolorPersistKey,
+          JSON.stringify({ consectetur: { adipiscing: 'elit' } }),
+        );
+      });
+
+      it('rehydrates store includes from localStorage', async () => {
+        const dolorPersistKey = getPersistKey(STORE_ID, 'dolor');
+        //* arrange
+        initializeLocalStorage(
+          { persistKey: PERSIST_KEY, value: STATE_VALUE },
+          { persistKey: dolorPersistKey, value: { consectetur: { adipiscing: 'elit' } } },
+        );
+
+        //* act
+        await nextTick();
+        const store = useStore();
+
+        //* assert
+        expect(store[STATE_KEY]).toEqual(STATE_VALUE);
+        expect(store.dolor.consectetur.adipiscing).toEqual('elit');
+        expect(localStorage.getItem).toHaveBeenCalledWith(dolorPersistKey);
       });
     });
   });

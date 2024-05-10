@@ -2,7 +2,7 @@ import { toRaw, isRef, type Ref } from 'vue';
 import { StateTree, Store, _ActionsTree, _GettersTree } from 'pinia';
 import { CnStatePersistContext, CnStorePersistContext, ListenerPersister, StateKeyType } from './types';
 import { capitalize, isObject } from './util';
-import { emitPersistEvent, produceListenerPersister } from './persist';
+import { emitPersistEvent, produceHashLevelPersist, produceStateLevelPersist } from './persist';
 import { restoreFromStoreValue } from './restore';
 
 const HSET_PREFIX = 'hsetAndPersist';
@@ -30,11 +30,14 @@ const abstractRegisterPersister = (
 ) => {
   const {
     stateKey,
-    statePersistOptions: { policy },
+    storage,
+    persistKey,
+    statePersistOptions: { policy, serialize },
   } = statePersistContext;
+
   if (policy == 'HASH') {
     const hsetActionName = getHsetActionName(stateKey);
-    const hashPersister = produceListenerPersister('HASH', statePersistContext);
+    const hashPersister = produceHashLevelPersist(storage, persistKey, serialize!);
     if (actions[hsetActionName]) {
       // 对于 HASH 策略的 state，如果存在符合命名规范的 Action，则基于 Action 实现持久化
       actionNamePersisterRegistry.set(hsetActionName, hashPersister);
@@ -61,9 +64,15 @@ const abstractRegisterPersister = (
       hashTargetObjectPersisterRegistry.set(rawHashTargetObject, hashPersister);
       hashTargetObjectPersisterUtil.set(stateRegisterKey, rawHashTargetObject);
     }
-    stateKeyPersisterRegistry.set(stateRegisterKey, produceListenerPersister('HASH_RESET', statePersistContext));
+    stateKeyPersisterRegistry.set(
+      stateRegisterKey,
+      produceStateLevelPersist('HASH_RESET', storage, persistKey, serialize!),
+    );
   } else {
-    stateKeyPersisterRegistry.set(stateRegisterKey, produceListenerPersister('STRING', statePersistContext));
+    stateKeyPersisterRegistry.set(
+      stateRegisterKey,
+      produceStateLevelPersist('STRING', storage, persistKey, serialize!),
+    );
   }
 };
 
@@ -105,17 +114,18 @@ export const registerPersister = (
 
 export const initPersistOrRestore = (statePersistContext: CnStatePersistContext<unknown>) => {
   const {
+    storage,
     stateKey,
     persistKey,
-    statePersistOptions: { policy },
-    storePersistContext: { storage, storeState },
+    statePersistOptions: { policy, serialize },
+    storePersistContext: { storeState },
   } = statePersistContext;
   const storageValue = storage.getItem(persistKey);
   if (!storageValue) {
     // 如果持久化数据不存在，则检查 state 是否有初始值，如果有则对初始值进行持久化
     const initValue = storeState[stateKey];
     if (initValue) {
-      emitPersistEvent(policy == 'STRING' ? 'STRING' : 'HASH_RESET', initValue, statePersistContext);
+      emitPersistEvent(policy == 'STRING' ? 'STRING' : 'HASH_RESET', storage, persistKey, initValue, serialize!);
     }
   } else {
     /**

@@ -1,8 +1,12 @@
 import { getPersistKey } from '../src/util';
 
-export function initializeLocalStorage(persistKey: string, stateValue: unknown): void {
+export function initializeLocalStorage(...entries: { persistKey: string; value: unknown }[]): void {
   localStorage.clear();
-  localStorage.setItem(persistKey, JSON.stringify(stateValue));
+  if (entries) {
+    entries.forEach(entry => {
+      localStorage.setItem(entry.persistKey, JSON.stringify(entry.value));
+    });
+  }
 }
 
 export function readLocalStoage(persistKey: string): Record<string, unknown> | null {

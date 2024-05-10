@@ -34,8 +34,9 @@ export const restoreHash = (
   {
     stateKey,
     persistKey,
+    storage,
     statePersistOptions: { deserialize, deserializePostHandler },
-    storePersistContext: { storage, storeState },
+    storePersistContext: { storeState },
   }: CnStatePersistContext<unknown>,
 ) => {
   const hashValue: Record<string, unknown> = {};

@@ -175,10 +175,7 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
       statePersistContexts.length > 0
         ? () => {
             statePersistContexts.forEach(statePersistContext => {
-              const {
-                persistKey,
-                storePersistContext: { storage },
-              } = statePersistContext;
+              const { storage, persistKey } = statePersistContext;
               const storageValue = storage.getItem(persistKey);
               if (storageValue) {
                 restoreFromStoreValue(storageValue, statePersistContext);

@@ -25,14 +25,14 @@ export const capitalize = (str: string) => {
 };
 
 // 防抖
-export const debounce = <T>(fn: (arg: T) => void, timeout: number) => {
+export const debounce = (fn: () => void, timeout: number) => {
   let timer: NodeJS.Timeout;
-  return (arg: T) => {
+  return () => {
     if (timer) {
       clearTimeout(timer);
     }
     timer = setTimeout(() => {
-      fn(arg);
+      fn();
     }, timeout);
   };
 };
@@ -112,15 +112,8 @@ export const produceStorePersistContext = (
   mixedPersistOptions: CnPersistOptions<StateTree>,
 ): CnStorePersistContext | null => {
   try {
-    const {
-      storage = localStorage,
-      key = storeId,
-      debug = false,
-      states = getAllStatesWithEmptyOptions(storeState),
-    } = mixedPersistOptions;
-
+    const { key = storeId, debug = false, states = getAllStatesWithEmptyOptions(storeState) } = mixedPersistOptions;
     return {
-      storage,
       key: (factoryOptions.key ?? (k => k))(typeof key == 'string' ? key : key(storeId)),
       debug,
       states,
@@ -183,12 +176,14 @@ export const produceStatePersistContext = (
       deserialize = DEFAULT_STATE_DESERIALIZER,
       deserializePostHandler = DEFAULT_DESERIALIZE_POST_HANDLER,
     } = statePersistOptions;
+    const storage = statePersistOptions.storage ?? mixedPersistOptions.storage;
     /**
      * 这里必须对 storeState 调用 toRaw()，因为 storeState 是代理，其 setter 被动了手脚，
      * 在 setup 配置 pinia 的情况下，storeState[stateKey] 拿到的不是 Ref，而是 Ref.value 的值
      */
     const stateValue: unknown | Ref<unknown> = toRaw(storeState)[stateKey];
     return {
+      storage: storage ?? localStorage,
       stateKey,
       persistKey,
       statePersistOptions: {

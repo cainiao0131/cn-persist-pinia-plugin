@@ -1,20 +1,25 @@
-import { CnPersistEvent, CnPersistEventType, CnStatePersistContext } from './types';
+import { CnPersistEvent, CnPersistEventType, CnStateSerializer, StorageLike } from './types';
 import { getPersistHashKey, debounce } from './util';
 
+let debouncedConsumPersistEvent = () => {
+  console.warn('debouncedConsumPersistEvent is not initialized');
+};
+/**
+ * 自定义全局延迟时间
+ */
+export const setGlobalDebounce = (globalDebounce: number) => {
+  debouncedConsumPersistEvent = produceDebouncedConsumPersistEvent(globalDebounce);
+};
 /**
  * 防抖持久化器的工厂
  * 使用工厂模式，以便可以自定义全局防抖延迟
  * globalDebounce 小于等于 0 时，禁用防抖
  */
-const produceDebouncedPersister = (globalDebounce: number) => {
+const produceDebouncedConsumPersistEvent = (globalDebounce: number) => {
   if (globalDebounce <= 0) {
-    return persist;
+    return consumPersistEvent;
   }
-  return debounce(persist, globalDebounce);
-};
-
-let debouncedPersist = (statePersistContext: CnStatePersistContext<unknown>) => {
-  console.warn('debouncedPersist is not initialized >>> statePersistContext =', statePersistContext);
+  return debounce(consumPersistEvent, globalDebounce);
 };
 
 /**
@@ -32,17 +37,17 @@ let persistBuffer: Record<string, CnPersistEvent> = {};
 /**
  * 持久化器，持久化逻辑的实现
  */
-const persist = (statePersistContext: CnStatePersistContext<unknown>) => {
+const consumPersistEvent = () => {
   Object.entries(persistBuffer).forEach(([persistKey, cnPersistEvent]) => {
     switch (cnPersistEvent.type) {
       case 'STRING':
-        persistString(persistKey, cnPersistEvent, statePersistContext);
+        persistString(persistKey, cnPersistEvent);
         break;
       case 'HASH':
-        persistHash(persistKey, cnPersistEvent, statePersistContext);
+        persistHash(persistKey, cnPersistEvent);
         break;
       case 'HASH_RESET':
-        persistHashReset(persistKey, cnPersistEvent, statePersistContext);
+        persistHashReset(persistKey, cnPersistEvent);
         break;
       default:
         break;
@@ -57,13 +62,13 @@ const persist = (statePersistContext: CnStatePersistContext<unknown>) => {
  * @param persistKey 持久化 key，即 storage 的 key
  * @param cnPersistEvent 持久化事件，封装了：持久化类型、持久化数据，以及序列化器
  */
-const persistString = (
-  persistKey: string,
-  { stateSerializer, newValue }: CnPersistEvent,
-  { storePersistContext: { storage } }: CnStatePersistContext<unknown>,
-) => {
-  const persistValue = stateSerializer(newValue);
+const persistString = (persistKey: string, { storage, newValue, serialize }: CnPersistEvent) => {
+  const persistValue = serialize(newValue);
   if (persistValue == null) {
+    /**
+     * 给用户一个机会在运行时判断是否持久化，自定义 serialize 返回 null 则不持久化
+     * 例如用户发现需要持久化的值没有变化时可选择不持久化
+     */
     return;
   }
   storage.setItem(persistKey, persistValue);
@@ -71,20 +76,19 @@ const persistString = (
 
 /**
  * hash 类型的 Entry 持久化逻辑，即对 Record 类型的 state 的一个 Entry 进行持久化
+ * TODO 考虑去掉 hashKeySet 的持久化
+ * TODO 在恢复数据时遍历 storage 的 Key 并通过前缀来判断那些 Hash Key 属于同一个 Hash Object
+ * TODO 这样可以减小运行时开销，而恢复数据只在刷新页面时才会执行，因此开销增加一点没有关系
  *
  * @param persistKey 持久化 key，即 storage 的 key
  * @param cnPersistEvent 持久化事件，封装了：持久化类型、Entry 的 Value，以及序列化器（针对单个 Entry 的 Value）
  */
-const persistHash = (
-  persistKey: string,
-  { stateSerializer, newValue }: CnPersistEvent,
-  { storePersistContext: { storage } }: CnStatePersistContext<unknown>,
-) => {
-  const hashValue: Record<string, unknown> = newValue as Record<string, unknown>;
-  const hashKeysString = storage.getItem(persistKey);
-  const hashKeySet = hashKeysString ? new Set(JSON.parse(hashKeysString)) : new Set();
-  Object.entries(hashValue).forEach(([hashKey, value]) => {
-    const persistValue = stateSerializer(value);
+const persistHash = (persistKey: string, { storage, newValue, serialize }: CnPersistEvent) => {
+  const newHashObject: Record<string, unknown> = newValue as Record<string, unknown>;
+  const oldHashKeysString = storage.getItem(persistKey);
+  const hashKeySet = oldHashKeysString ? new Set(JSON.parse(oldHashKeysString)) : new Set();
+  Object.entries(newHashObject).forEach(([hashKey, newHashValue]) => {
+    const persistValue = serialize(newHashValue);
     if (persistValue != null) {
       storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
       hashKeySet.add(hashKey);
@@ -97,22 +101,20 @@ const persistHash = (
  * hash 类型的整体持久化逻辑，对 Record 类型的 state 的所有 Entry 逐个进行持久化
  * 主要用于在分布式情况下，例如其它客户端删除了一些 Entry，而这个删除操作难以在本地触发对 Entry 的删除
  * 因此通过重新构建整个 Record 的方式，清理垃圾 Entry
+ * TODO 考虑去掉 hashKeySet 的持久化，详见 persistHash
+ * TODO 为了在 REHASH 时知道要删除哪些 Key，在 restore 时要同时为 HASH 持久化策略的 state 维护 keys
  *
  * @param persistKey 持久化 key，即 storage 的 key
  * @param cnPersistEvent 持久化事件，封装了：持久化类型、整个 Record 的值，以及序列化器（针对单个 Entry 的 Value）
  */
-const persistHashReset = (
-  persistKey: string,
-  { stateSerializer, newValue }: CnPersistEvent,
-  { storePersistContext: { storage } }: CnStatePersistContext<unknown>,
-) => {
+const persistHashReset = (persistKey: string, { storage, newValue, serialize }: CnPersistEvent) => {
   const hashValue: Record<string, unknown> = newValue as Record<string, unknown>;
   const oldHashKeysString = storage.getItem(persistKey);
   // 待删除的旧 Entry
   const oldHashKeySetToDelete: Set<string> = oldHashKeysString ? new Set(JSON.parse(oldHashKeysString)) : new Set();
   const hashKeySet = new Set();
   Object.entries(hashValue).forEach(([hashKey, value]) => {
-    const persistValue = stateSerializer(value);
+    const persistValue = serialize(value);
     if (persistValue != null) {
       storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
       hashKeySet.add(hashKey);
@@ -135,51 +137,42 @@ const persistHashReset = (
  */
 export const emitPersistEvent = (
   type: CnPersistEventType,
+  storage: StorageLike,
+  persistKey: string,
   newValue: unknown,
-  statePersistContext: CnStatePersistContext<unknown>,
+  serialize: CnStateSerializer,
 ) => {
-  const {
-    persistKey,
-    statePersistOptions: { serialize },
-  } = statePersistContext;
-  persistBuffer[persistKey] = { type, newValue, stateSerializer: serialize! };
-  debouncedPersist(statePersistContext);
+  persistBuffer[persistKey] = { type, storage, newValue, serialize };
+  debouncedConsumPersistEvent();
 };
 
-/**
- * 自定义全局延迟时间
- */
-export const setGlobalDebounce = (globalDebounce: number) => {
-  debouncedPersist = produceDebouncedPersister(globalDebounce);
+export const emitPersistEventForHash = (hashKey: string, newValue: unknown, oldEvent: CnPersistEvent) => {
+  (oldEvent.newValue as Record<string, unknown>)[hashKey] = newValue;
+  debouncedConsumPersistEvent();
 };
 
-/**
- * Action 持久化器的工厂
- * 根据持久化类型，生产 Action 持久化器
- */
-export const produceListenerPersister = (
-  type: CnPersistEventType,
-  statePersistContext: CnStatePersistContext<unknown>,
+export const produceHashLevelPersist = (
+  storage: StorageLike,
+  persistKey: string,
+  serialize: CnStateSerializer,
 ): ((args: Array<unknown>) => void) => {
-  const { persistKey } = statePersistContext;
-  switch (type) {
-    case 'HASH':
-      return args => {
-        const oldEvent = persistBuffer[persistKey];
-        if (oldEvent) {
-          const oldHashValue: Record<string, unknown> = oldEvent.newValue as Record<string, unknown>;
-          if (!oldHashValue) {
-            throw new Error('oldHashValue cannot be null here');
-          }
-          oldHashValue[args[1] as string] = args[0];
-          debouncedPersist(statePersistContext);
-        } else {
-          emitPersistEvent('HASH', { [args[1] as string]: args[0] }, statePersistContext);
-        }
-      };
-    default:
-      return args => {
-        emitPersistEvent(type, args[0], statePersistContext);
-      };
-  }
+  return args => {
+    const oldEvent = persistBuffer[persistKey];
+    if (oldEvent) {
+      emitPersistEventForHash(args[1] as string, args[0], oldEvent);
+    } else {
+      emitPersistEvent('HASH', storage, persistKey, { [args[1] as string]: args[0] }, serialize);
+    }
+  };
+};
+
+export const produceStateLevelPersist = (
+  type: CnPersistEventType,
+  storage: StorageLike,
+  persistKey: string,
+  serialize: CnStateSerializer,
+): ((args: Array<unknown>) => void) => {
+  return args => {
+    emitPersistEvent(type, storage, persistKey, args[0], serialize);
+  };
 };
