@@ -1,3 +1,4 @@
+import { isRef } from 'vue';
 import { getPersistHashKey } from './util';
 import { CnStatePersistContext } from './types';
 
@@ -24,7 +25,12 @@ export const restoreString = (stringValue: string, statePersistContext: CnStateP
   } = statePersistContext;
   const value_ = deserialize!(stringValue);
   if (value_ != null) {
-    storeState[stateKey] = value_;
+    const stateValue = storeState[stateKey];
+    if (isRef(stateValue)) {
+      stateValue.value = value_;
+    } else {
+      storeState[stateKey] = value_;
+    }
   }
 };
 
@@ -50,5 +56,10 @@ export const restoreHash = (
       }
     }
   });
-  storeState[stateKey] = deserializePostHandler!(hashValue);
+  const stateValue = storeState[stateKey];
+  if (isRef(stateValue)) {
+    stateValue.value = deserializePostHandler!(hashValue);
+  } else {
+    storeState[stateKey] = deserializePostHandler!(hashValue);
+  }
 };

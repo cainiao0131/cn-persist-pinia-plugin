@@ -1,5 +1,16 @@
-import { CnPersistEvent, CnPersistEventType, CnStateSerializer, StorageLike } from './types';
+import { PiniaCustomStateProperties, StateTree, StoreOnActionListener } from 'pinia';
+import {
+  CnPersistEvent,
+  CnPersistEventType,
+  CnStateSerializer,
+  CnListenerPersist,
+  StorageLike,
+  StateKeyType,
+  CnStatePersistContext,
+  StateLevelPersist,
+} from './types';
 import { getPersistHashKey, debounce } from './util';
+import { restoreFromStoreValue } from './restore';
 
 let debouncedConsumPersistEvent = () => {
   console.warn('debouncedConsumPersistEvent is not initialized');
@@ -88,10 +99,12 @@ const persistHash = (persistKey: string, { storage, newValue, serialize }: CnPer
   const oldHashKeysString = storage.getItem(persistKey);
   const hashKeySet = oldHashKeysString ? new Set(JSON.parse(oldHashKeysString)) : new Set();
   Object.entries(newHashObject).forEach(([hashKey, newHashValue]) => {
-    const persistValue = serialize(newHashValue);
-    if (persistValue != null) {
-      storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
-      hashKeySet.add(hashKey);
+    if (typeof newHashValue !== 'function') {
+      const persistValue = serialize(newHashValue);
+      if (persistValue != null) {
+        storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
+        hashKeySet.add(hashKey);
+      }
     }
   });
   storage.setItem(persistKey, JSON.stringify(Array.from(hashKeySet)));
@@ -114,12 +127,14 @@ const persistHashReset = (persistKey: string, { storage, newValue, serialize }: 
   const oldHashKeySetToDelete: Set<string> = oldHashKeysString ? new Set(JSON.parse(oldHashKeysString)) : new Set();
   const hashKeySet = new Set();
   Object.entries(hashValue).forEach(([hashKey, value]) => {
-    const persistValue = serialize(value);
-    if (persistValue != null) {
-      storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
-      hashKeySet.add(hashKey);
-      if (oldHashKeySetToDelete.has(hashKey)) {
-        oldHashKeySetToDelete.delete(hashKey);
+    if (typeof value !== 'function') {
+      const persistValue = serialize(value);
+      if (persistValue != null) {
+        storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
+        hashKeySet.add(hashKey);
+        if (oldHashKeySetToDelete.has(hashKey)) {
+          oldHashKeySetToDelete.delete(hashKey);
+        }
       }
     }
   });
@@ -146,7 +161,7 @@ export const emitPersistEvent = (
   debouncedConsumPersistEvent();
 };
 
-export const emitPersistEventForHash = (hashKey: string, newValue: unknown, oldEvent: CnPersistEvent) => {
+export const emitPersistEventForHash = (hashKey: string, oldEvent: CnPersistEvent, newValue?: unknown) => {
   (oldEvent.newValue as Record<string, unknown>)[hashKey] = newValue;
   debouncedConsumPersistEvent();
 };
@@ -159,7 +174,7 @@ export const produceHashLevelPersist = (
   return args => {
     const oldEvent = persistBuffer[persistKey];
     if (oldEvent) {
-      emitPersistEventForHash(args[1] as string, args[0], oldEvent);
+      emitPersistEventForHash(args[1] as string, oldEvent, args[0]);
     } else {
       emitPersistEvent('HASH', storage, persistKey, { [args[1] as string]: args[0] }, serialize);
     }
@@ -171,8 +186,59 @@ export const produceStateLevelPersist = (
   storage: StorageLike,
   persistKey: string,
   serialize: CnStateSerializer,
-): ((args: Array<unknown>) => void) => {
-  return args => {
-    emitPersistEvent(type, storage, persistKey, args[0], serialize);
+): StateLevelPersist => {
+  return stateValue => {
+    emitPersistEvent(type, storage, persistKey, stateValue, serialize);
+  };
+};
+
+export const produceActionListener = (
+  actionNamePersisterRegistry: Map<string, CnListenerPersist>,
+): StoreOnActionListener<string, StateTree, unknown, unknown> => {
+  if (actionNamePersisterRegistry.size < 1) {
+    return () => {};
+  }
+  return listenerContext => {
+    listenerContext.after(() => {
+      console.log('');
+      console.log('listenerContext.name =', listenerContext.name);
+      console.log('actionNamePersisterRegistry =', actionNamePersisterRegistry);
+
+      // Action 成功后执行持久化
+      const actionPersister = actionNamePersisterRegistry.get(listenerContext.name);
+      if (actionPersister) {
+        const { args } = listenerContext;
+        actionPersister([args[1], args[0]]);
+      }
+    });
+  };
+};
+
+export const produceStorePersist = (
+  stateLevelPersistRegistry: Map<StateKeyType, StateLevelPersist>,
+  storeState: StateTree & PiniaCustomStateProperties<StateTree>,
+) => {
+  if (stateLevelPersistRegistry.size < 1) {
+    return () => {};
+  }
+  return () => {
+    for (const [stateKey, stateLevelPersist] of stateLevelPersistRegistry.entries()) {
+      stateLevelPersist(storeState[stateKey]);
+    }
+  };
+};
+
+export const produceStoreHydrate = (statePersistContextMap: Map<StateKeyType, CnStatePersistContext<unknown>>) => {
+  if (statePersistContextMap.size < 1) {
+    return () => {};
+  }
+  return () => {
+    statePersistContextMap.forEach(statePersistContext => {
+      const { storage, persistKey } = statePersistContext;
+      const storageValue = storage.getItem(persistKey);
+      if (storageValue) {
+        restoreFromStoreValue(storageValue, statePersistContext);
+      }
+    });
   };
 };

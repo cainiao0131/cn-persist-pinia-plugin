@@ -1,11 +1,11 @@
-import { type Ref } from 'vue';
 import { StateTree } from 'pinia';
 
 export type CnKeyFilter<T> = { [K in keyof T]?: CnKeyFilter<T[K]> | true };
 
 export type StateKeyType = string | number | symbol;
 
-export type ListenerPersister = (args: Array<unknown>) => void;
+export type CnListenerPersist = (args: Array<unknown>) => void;
+export type StateLevelPersist = (newValue: unknown) => void;
 
 /**
  * Prettify<T> 用于优化源码文档，即鼠标放上去看到的 TypeScript 类型注释
@@ -16,6 +16,11 @@ type Prettify<T> = { [K in keyof T]: T[K] };
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 export type CnPersistStates<S extends StateTree> = { [K in keyof S]?: CnStatePersistOptions<S[K]> };
+
+export type CnPersistMethods = {
+  stateLevelPersist: StateLevelPersist;
+  level1HashPersist: CnListenerPersist;
+};
 
 export interface CnPersistOptions<S extends StateTree> {
   /**
@@ -37,6 +42,7 @@ export interface CnPersistOptions<S extends StateTree> {
    * @default false
    */
   debug?: boolean;
+  hashActionPrefix?: string;
 }
 
 export type CnPersistFactoryOptions = Prettify<
@@ -57,6 +63,7 @@ export type CnPersistFactoryOptions = Prettify<
      * @default false
      */
     auto?: boolean;
+    hashActionPrefix?: string;
   }
 >;
 
@@ -71,6 +78,7 @@ export interface CnStorePersistContext {
   debug: boolean;
   states: CnPersistStates<StateTree>;
   storeState: StateTree;
+  hashActionPrefix: string;
 }
 /**
  * state 域的上下文，T 为当前 state 的类型
@@ -78,10 +86,9 @@ export interface CnStorePersistContext {
 export interface CnStatePersistContext<T> {
   stateKey: string;
   persistKey: string;
+  hashActionName: string;
   statePersistOptions: CnStatePersistOptions<T>;
   storePersistContext: CnStorePersistContext;
-  isSetup: boolean;
-  stateValue: unknown | Ref<unknown>;
   storage: StorageLike;
 }
 
@@ -93,6 +100,7 @@ export type CnPersistPolicy = 'STRING' | 'HASH';
  * 为每个 state 进行配置的配置项类型，T 为正在配置的 state 的类型
  */
 export interface CnStatePersistOptions<T> {
+  hashActionName?: string;
   policy?: CnPersistPolicy;
   storage?: StorageLike;
   /**
@@ -156,7 +164,7 @@ export type CnPersistEventType = 'STRING' | 'HASH' | 'HASH_RESET';
 
 export type CnPersistEvent = {
   type: CnPersistEventType;
-  newValue: unknown;
+  newValue?: unknown;
   serialize: CnStateSerializer;
   storage: StorageLike;
 };

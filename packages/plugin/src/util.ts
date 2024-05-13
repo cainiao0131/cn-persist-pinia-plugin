@@ -1,4 +1,3 @@
-import { toRaw, isRef, type Ref } from 'vue';
 import { StateTree } from 'pinia';
 import {
   CnDeserializePostHandler,
@@ -13,6 +12,42 @@ import {
   CnStorePersistContext,
   StateKeyType,
 } from './types';
+
+/**
+ * 深度遍历对象，并对每个对象调用回调函数
+ *
+ * @param obj 待遍历的对象
+ * @param callback 对每个对象调用的回调函数
+ */
+export const deepTraversalObject = (obj: unknown, callback: (value: unknown) => void) => {
+  if (typeof obj === 'object' && obj !== null) {
+    callback(obj);
+    Object.keys(obj).forEach(key => {
+      deepTraversalObject((obj as Record<string, unknown>)[key], callback);
+    });
+  }
+};
+
+/**
+ * 深度遍历对象，并对每个对象调用回调函数，返回 false 表示终断遍历
+ *
+ * @param obj 待遍历的对象
+ * @param callback 对每个对象调用的回调函数，返回 false 表示终断遍历
+ * @returns 返回 false 表示遍历被终断
+ */
+export const deepTraversalObjectTerminable = (obj: unknown, callback: (value: unknown) => boolean): boolean => {
+  if (typeof obj === 'object' && obj !== null) {
+    if (!callback(obj)) {
+      return false;
+    }
+    for (const key in Object.keys(obj)) {
+      if (!deepTraversalObjectTerminable((obj as Record<string, unknown>)[key], callback)) {
+        return false;
+      }
+    }
+  }
+  return true;
+};
 
 export const capitalize = (str: string) => {
   if (str.length < 1) {
@@ -61,13 +96,13 @@ export const getStateConverter = (cnPersist: CnPersistOptions<StateTree>, stateK
   return stateConverters_[stateKey];
 };
 
-export const DEFAULT_STATE_SERIALIZER: CnStateSerializer = (newValue: unknown) =>
+export const DEFAULT_STATE_SERIALIZER: CnStateSerializer = (newValue?: unknown) =>
   newValue ? JSON.stringify(newValue) : '';
 
 export const DEFAULT_STATE_DESERIALIZER: CnStateDeserializer = (persistedValue: string | null) =>
   persistedValue ? JSON.parse(persistedValue) : null;
 
-export const DEFAULT_DESERIALIZE_POST_HANDLER: CnDeserializePostHandler = (newValue: unknown) => newValue;
+export const DEFAULT_DESERIALIZE_POST_HANDLER: CnDeserializePostHandler = (newValue?: unknown) => newValue;
 
 /**
  * 将 store 独立的选项与全局选项合并
@@ -85,13 +120,11 @@ export const mixOptions = (
   factoryOptions: CnPersistFactoryOptions,
 ): CnPersistOptions<StateTree> => {
   options = isObject(options) ? options : Object.create(null);
-
   return new Proxy(options as object, {
     get(target, key, receiver) {
       if (key === 'key') {
         return Reflect.get(target, key, receiver);
       }
-
       return Reflect.get(target, key, receiver) || Reflect.get(factoryOptions, key, receiver);
     },
   });
@@ -99,7 +132,7 @@ export const mixOptions = (
 
 const getAllStatesWithEmptyOptions = (storeState: StateTree): CnPersistStates<StateTree> => {
   const result: Partial<CnPersistStates<StateTree>> = {};
-  Object.keys(toRaw(storeState)).forEach(key => {
+  Object.keys(storeState).forEach(key => {
     result[key] = {};
   });
   return result as CnPersistStates<StateTree>;
@@ -112,12 +145,19 @@ export const produceStorePersistContext = (
   mixedPersistOptions: CnPersistOptions<StateTree>,
 ): CnStorePersistContext | null => {
   try {
-    const { key = storeId, debug = false, states = getAllStatesWithEmptyOptions(storeState) } = mixedPersistOptions;
+    const {
+      key = storeId,
+      debug = false,
+      // 有 cnPersist，但没有 states，视为所有 state 都按照 STRING 策略持久化
+      states = getAllStatesWithEmptyOptions(storeState),
+      hashActionPrefix = 'hsetAndPersist',
+    } = mixedPersistOptions;
     return {
       key: (factoryOptions.key ?? (k => k))(typeof key == 'string' ? key : key(storeId)),
       debug,
       states,
       storeState,
+      hashActionPrefix,
     };
   } catch (e) {
     if (mixedPersistOptions.debug) {
@@ -170,9 +210,10 @@ export const produceStatePersistContext = (
   storePersistContext: CnStorePersistContext,
 ): CnStatePersistContext<unknown> | null => {
   try {
-    const { storeState } = storePersistContext;
+    const { hashActionPrefix } = storePersistContext;
     const {
       policy = 'STRING',
+      hashActionName = `${hashActionPrefix}${capitalize(stateKey)}`,
       deserialize = DEFAULT_STATE_DESERIALIZER,
       deserializePostHandler = DEFAULT_DESERIALIZE_POST_HANDLER,
     } = statePersistOptions;
@@ -181,9 +222,9 @@ export const produceStatePersistContext = (
      * 这里必须对 storeState 调用 toRaw()，因为 storeState 是代理，其 setter 被动了手脚，
      * 在 setup 配置 pinia 的情况下，storeState[stateKey] 拿到的不是 Ref，而是 Ref.value 的值
      */
-    const stateValue: unknown | Ref<unknown> = toRaw(storeState)[stateKey];
     return {
       storage: storage ?? localStorage,
+      hashActionName,
       stateKey,
       persistKey,
       statePersistOptions: {
@@ -193,8 +234,6 @@ export const produceStatePersistContext = (
         deserializePostHandler,
       },
       storePersistContext,
-      isSetup: isRef(stateValue),
-      stateValue,
     };
   } catch (e) {
     if (mixedPersistOptions.debug) {

@@ -23,6 +23,55 @@ pinia 插件，用于 state 持久化，与 pinia-plugin-persistedstate 相比�
 如果 state 有初始值，会持久化这些初始值
 如果有初始值的 state 已经有持久化数据，则会根据已持久化的值恢复并覆盖初始值
 
+#### 注意
+
+当使用 setup 风格配置 pinia 时，需要通过返回的对象来调用 Action，才能触发 Action 监听器
+如下通过 store.hsetAndPersistKeyNodeMap(key, node\_); 调用 hsetAndPersistKeyNodeMap() 方法
+如果不通过 store 直接调用 hsetAndPersistKeyNodeMap() 不会触发 Action 监听器
+因为监听器是被织入到返回的对象上的
+
+```typescript
+import { defineStore } from 'pinia';
+
+export const STORE_KEY_NODE_TREE_CACHE = 'node-tree-cache';
+// ...
+
+export const useNodeTreeCacheStore = defineStore(
+  STORE_KEY_NODE_TREE_CACHE,
+  () => {
+    // ...
+
+    const hsetAndPersistKeyNodeMap = (key: string, node: DataNode) => {
+      keyNodeMap.value[key] = node;
+    };
+
+    // children 改变时统一调用这个方法，以便垃圾回收
+    const changeChildren = (key: string, newChildren: Array<DataNode>) => {
+      // ...
+      store.hsetAndPersistKeyNodeMap(key, node_);
+    };
+    // ...
+
+    const store = {
+      changeChildren,
+      hsetAndPersistKeyNodeMap,
+      // ...
+    };
+
+    return store;
+  },
+  {
+    cnPersist: {
+      states: {
+        // ...
+      },
+    },
+  },
+);
+
+export type NodeTreeStore = ReturnType<typeof useNodeTreeCacheStore>;
+```
+
 #### 软件架构
 
 软件架构说明

@@ -1,16 +1,23 @@
-import { type Ref } from 'vue';
+import { toRaw, watch } from 'vue';
 import { PiniaPluginContext } from 'pinia';
 import {
   CnPersistFactoryOptions,
   CnStatePersistContext,
   CnStatePersistOptions,
-  ListenerPersister,
+  CnListenerPersist,
   StateKeyType,
+  StateLevelPersist,
 } from './types';
-import { setGlobalDebounce } from './persist';
+import {
+  produceActionListener,
+  produceHashLevelPersist,
+  produceStateLevelPersist,
+  produceStoreHydrate,
+  produceStorePersist,
+  setGlobalDebounce,
+} from './persist';
 import { getPersistKey, mixOptions, produceStatePersistContext, produceStorePersistContext } from './util';
-import { initPersistOrRestore, registerListener, registerPersister } from './init';
-import { restoreFromStoreValue } from './restore';
+import { initPersistOrRestore } from './init';
 
 export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
   const { auto = false, globalDebounce = 500 } = factoryOptions;
@@ -46,7 +53,7 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
     }
     /* c8 ignore stop */
 
-    const storeState = store.$state;
+    const storeState = toRaw(store.$state);
 
     // 创建 store 上下文
     const mixedPersistOptions = mixOptions(cnPersist, factoryOptions);
@@ -59,55 +66,32 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
 
     const { key, states } = storePersistContext;
 
-    // 持久化器注册中心
-    /**
-     * 持久化策略为 STRING 和 HASH 的配置都会注册到 stateKeyPersisterRegistry
-     *
-     * 注册 state key 持久化器，以 state 对象的粒度进行变化监听，
-     * 对于持久化策略 STRING，以 state 对象的粒度进行持久化，以 STRING 类型的事件发起持久化；
-     * 对于持久化策略 HASH，以 state 对象的字段的粒度进行持久化，以 HASH_RESET 类型的事件发起持久化。
-     * 运行时以 state key 为 key 从注册中心获取持久化器，
-     * 注册中心由 mutation 监听器使用
-     */
-    const stateKeyPersisterRegistry: Map<StateKeyType | Ref<unknown>, ListenerPersister> = new Map();
-    /**
-     * 仅当持久化策略为 HASH，且用户没有配置对应的 Action 时，不得已才会注册 hashTargetObjectPersisterRegistry（不推荐），
-     * 推荐为 HASH 持久化策略配置符合命名规范的 Action
-     *
-     * 注册 state object 持久化器，以 state 对象的字段的粒度进行变化监听与持久化，
-     * 运行时以 state 对象（即 mutation 事件的 target 对象）为 key 从注册中心获取持久化器，
-     * 注册中心由 mutation 监听器使用
-     */
-    const hashTargetObjectPersisterRegistry: Map<unknown, ListenerPersister> = new Map();
-    const hashTargetObjectPersisterUtil: Map<StateKeyType | Ref<unknown>, unknown> = new Map();
-    /**
-     * 仅当持久化策略为 HASH，且用户配置了对应的 Action 时，才会注册 actionNamePersisterRegistry（HASH 策略推荐配置方式）
-     *
-     * 注册 hash key 持久化器，以 state 对象的字段的粒度进行监听与持久化，
-     * 运行时以 Action 名称为 key 从注册中心获取持久化器，
-     * 目前只能通过监听 Action 才能在运行时以 O(1) 拿到 hash key，因此注册器由 Action 监听器使用
-     */
-    const actionNamePersisterRegistry: Map<string, ListenerPersister> = new Map();
-
     /**
      * 为了方便用户配置 states 时能利用 typescript 自动根据 state 补全 state key，
      * states 的类型拥有所有 state 的 key，
      * 这里过滤掉那些没有值的 key
+     * TODO 验证这里是否有必要
      */
-    const stateOptionsEntries: Array<[string, CnStatePersistOptions<unknown>]> = Object.entries(states).filter(
-      entry => {
-        return !!entry[1];
-      },
-    ) as Array<[string, CnStatePersistOptions<unknown>]>;
+    const persistStateKeys: Array<string> = [];
+    Object.entries(states).forEach(entry => {
+      if (entry[1]) {
+        persistStateKeys.push(entry[0]);
+      }
+    });
 
-    const statePersistContexts: Array<CnStatePersistContext<unknown>> = [];
+    if (persistStateKeys.length < 1) {
+      return;
+    }
 
-    // 遍历当前 store 中的每个配置了持久化的 state key
-    stateOptionsEntries.forEach(([stateKey, statePersistOptions]) => {
+    const stateLevelPersistRegistry: Map<StateKeyType, StateLevelPersist> = new Map();
+    const statePersistContextMap: Map<StateKeyType, CnStatePersistContext<unknown>> = new Map();
+    const actionNamePersisterRegistry: Map<string, CnListenerPersist> = new Map();
+
+    persistStateKeys.forEach(stateKey => {
+      const statePersistOptions: CnStatePersistOptions<unknown> = states[stateKey]!;
       // state 的持久化 key，即 storage 使用的 key
       const persistKey = getPersistKey(key, stateKey);
 
-      // 创建 state 上下文
       const statePersistContext: CnStatePersistContext<unknown> | null = produceStatePersistContext(
         stateKey,
         persistKey,
@@ -120,18 +104,37 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
         return;
       }
 
-      /**
-       * 为当前 store 中的每个配置了持久化的 state，注册持久化器
-       * 以便在运行时可以根据 state key 或 target 对象直接从注册中心以 O(1) 获取
-       */
-      registerPersister(
-        stateKeyPersisterRegistry,
-        hashTargetObjectPersisterRegistry,
-        hashTargetObjectPersisterUtil,
-        actionNamePersisterRegistry,
-        actions,
-        statePersistContext,
-      );
+      const {
+        storage,
+        hashActionName,
+        statePersistOptions: { policy, serialize },
+      } = statePersistContext;
+
+      let stateLevelPersist: StateLevelPersist;
+      if (policy == 'HASH') {
+        if (!actions[hashActionName]) {
+          throw new Error(
+            `state [${stateKey}] is set to HASH persist policy, it must have an Action with name '${hashActionName}'`,
+          );
+        }
+        // 对于 HASH 策略的 state，基于 Action 实现 hashKey 粒度的持久化
+        actionNamePersisterRegistry.set(hashActionName, produceHashLevelPersist(storage, persistKey, serialize!));
+        stateLevelPersist = produceStateLevelPersist('HASH_RESET', storage, persistKey, serialize!);
+        watch(() => {
+          return store.$state[stateKey];
+        }, stateLevelPersist);
+      } else {
+        stateLevelPersist = produceStateLevelPersist('STRING', storage, persistKey, serialize!);
+        watch(
+          () => {
+            return store.$state[stateKey];
+          },
+          stateLevelPersist,
+          { deep: true },
+        );
+      }
+      stateLevelPersistRegistry.set(stateKey, stateLevelPersist);
+      statePersistContextMap.set(stateKey, statePersistContext);
 
       /**
        * 为当前 store 的每个 state 执行初始化操作
@@ -139,18 +142,11 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
        * 如果没有持久化数据，而 state 有初始值，则为 state 的初始值进行持久化
        */
       initPersistOrRestore(statePersistContext);
-      statePersistContexts.push(statePersistContext);
     });
 
-    // 注册 mutation 和 Action 监听器，以触发持久化
-    registerListener(
-      store,
-      stateKeyPersisterRegistry,
-      hashTargetObjectPersisterRegistry,
-      hashTargetObjectPersisterUtil,
-      actionNamePersisterRegistry,
-      storePersistContext,
-    );
+    if (actionNamePersisterRegistry.size > 0) {
+      store.$onAction(produceActionListener(actionNamePersisterRegistry));
+    }
 
     /**
      * 对 store 整体持久化
@@ -158,31 +154,12 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
      * 因此数据的整体持久化基于 stateKeyPersisterRegistry 即可
      * 如果注册中心为空，则注册一个空函数，保证用户调用 $persist 的代码不会报错
      */
-    store.$persist =
-      stateKeyPersisterRegistry.size > 0
-        ? () => {
-            stateOptionsEntries.forEach(([stateKey]) => {
-              const mutationPersister: ListenerPersister = stateKeyPersisterRegistry.get(stateKey)!;
-              mutationPersister([storeState[stateKey]]);
-            });
-          }
-        : () => {};
+    store.$persist = produceStorePersist(stateLevelPersistRegistry, store.$state);
 
     /**
      * 对 store 整体恢复
      */
-    store.$hydrate =
-      statePersistContexts.length > 0
-        ? () => {
-            statePersistContexts.forEach(statePersistContext => {
-              const { storage, persistKey } = statePersistContext;
-              const storageValue = storage.getItem(persistKey);
-              if (storageValue) {
-                restoreFromStoreValue(storageValue, statePersistContext);
-              }
-            });
-          }
-        : () => {};
+    store.$hydrate = produceStoreHydrate(statePersistContextMap);
 
     return {};
   };
