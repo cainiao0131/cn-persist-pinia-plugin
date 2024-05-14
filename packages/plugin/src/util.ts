@@ -242,7 +242,7 @@ export const produceStatePersistContext = (
     };
   } catch (e) {
     if (mixedPersistOptions.debug) {
-      console.error('[cn-persist-pinia-plugin]', e);
+      console.error('[cn-persist-pinia-plugin] produceStatePersistContext', e);
     }
     return null;
   }

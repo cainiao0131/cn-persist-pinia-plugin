@@ -204,7 +204,7 @@ declare module 'pinia' {
      *
      * Warning: this is for advances usecases, make sure you know what you're doing.
      */
-    $hydrate: () => void;
+    $hydrate: (opts?: { runHooks?: boolean }) => void;
 
     /**
      * Persists store into configured storage
