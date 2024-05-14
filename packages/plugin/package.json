@@ -37,7 +37,8 @@
     "publish": "tsup --dts --format esm,cjs src/index.ts && npm publish"
   },
   "peerDependencies": {
-    "pinia": "^2.0.0"
+    "pinia": "^2.0.0",
+    "vue": "^3.0.11"
   },
   "devDependencies": {
     "pinia": "^2.1.7"

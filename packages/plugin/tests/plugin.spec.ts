@@ -5,7 +5,6 @@ import { createPinia, defineStore, setActivePinia } from 'pinia';
 import { createCnPersistPiniaPlugin } from '../src/plugin';
 import { initializeLocalStorage, readLocalStoage } from './utils';
 import { getPersistKey } from '../src/util';
-import { StorageLike } from '../src';
 
 const STORE_ID = 'mock-store';
 const STATE_KEY = 'lorem';
