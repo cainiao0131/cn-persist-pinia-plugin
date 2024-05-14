@@ -33,7 +33,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:run": "vitest --run",
-    "release": "bumpp -t \"v%s\" -c \":bookmark: release v\""
+    "release": "bumpp -t \"v%s\" -c \":bookmark: release v\"",
+    "publish": "npm publish"
   },
   "peerDependencies": {
     "pinia": "^2.0.0"

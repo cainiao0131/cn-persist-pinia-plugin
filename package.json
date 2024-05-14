@@ -26,7 +26,8 @@
     "docs:serve": "vitepress serve docs",
     "postinstall": "stale-dep -u",
     "release:plugin": "pnpm -F cn-persist-pinia-plugin run release",
-    "release:nuxt": "pnpm -F @cn-persist-pinia-plugin/nuxt run release"
+    "release:nuxt": "pnpm -F @cn-persist-pinia-plugin/nuxt run release",
+    "publish:plugin": "pnpm -F cn-persist-pinia-plugin run publish"
   },
   "devDependencies": {
     "@types/node": "^20.10.8",
