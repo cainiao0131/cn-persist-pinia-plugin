@@ -34,7 +34,7 @@
     "test:coverage": "vitest run --coverage",
     "test:run": "vitest --run",
     "release": "bumpp -t \"v%s\" -c \":bookmark: release v\"",
-    "publish": "npm publish"
+    "publish": "tsup --dts --format esm,cjs src/index.ts && npm publish"
   },
   "peerDependencies": {
     "pinia": "^2.0.0"
