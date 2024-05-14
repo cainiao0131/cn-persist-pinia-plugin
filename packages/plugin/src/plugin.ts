@@ -23,7 +23,7 @@ import { getItem, produceStoreHydrate, restoreState, setGetItem } from './restor
 export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
   const { auto = false, globalDebounce = 500 } = factoryOptions;
 
-  // 根据配置设置全局防抖延迟
+  // 设置全局防抖延迟
   setGlobalDebounce(globalDebounce);
 
   return (context: PiniaPluginContext) => {
