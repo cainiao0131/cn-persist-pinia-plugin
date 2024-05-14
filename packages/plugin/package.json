@@ -1,7 +1,7 @@
 {
   "name": "cn-persist-pinia-plugin",
   "type": "module",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Configurable persistence and rehydration of Pinia stores.",
   "author": "CaiNiao",
   "license": "GPL-2.0",
