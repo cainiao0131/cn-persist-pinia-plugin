@@ -11,6 +11,7 @@ import {
   CnStateSerializer,
   CnStorePersistContext,
   StateKeyType,
+  StorageLike,
 } from './types';
 
 /**
@@ -151,6 +152,8 @@ export const produceStorePersistContext = (
       // 有 cnPersist，但没有 states，视为所有 state 都按照 STRING 策略持久化
       states = getAllStatesWithEmptyOptions(storeState),
       hashActionPrefix = 'hsetAndPersist',
+      beforeRestore,
+      afterRestore,
     } = mixedPersistOptions;
     return {
       key: (factoryOptions.key ?? (k => k))(typeof key == 'string' ? key : key(storeId)),
@@ -158,6 +161,8 @@ export const produceStorePersistContext = (
       states,
       storeState,
       hashActionPrefix,
+      beforeRestore,
+      afterRestore,
     };
   } catch (e) {
     if (mixedPersistOptions.debug) {

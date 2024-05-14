@@ -1,4 +1,4 @@
-import { StateTree } from 'pinia';
+import { PiniaPluginContext, StateTree } from 'pinia';
 
 export type CnKeyFilter<T> = { [K in keyof T]?: CnKeyFilter<T[K]> | true };
 
@@ -43,6 +43,18 @@ export interface CnPersistOptions<S extends StateTree> {
    */
   debug?: boolean;
   hashActionPrefix?: string;
+
+  /**
+   * Hook called before state is hydrated from storage.
+   * @default undefined
+   */
+  beforeRestore?: (context: PiniaPluginContext) => void;
+
+  /**
+   * Hook called after state is hydrated from storage.
+   * @default undefined
+   */
+  afterRestore?: (context: PiniaPluginContext) => void;
 }
 
 export type CnPersistFactoryOptions = Prettify<
@@ -79,6 +91,17 @@ export interface CnStorePersistContext {
   states: CnPersistStates<StateTree>;
   storeState: StateTree;
   hashActionPrefix: string;
+  /**
+   * Hook called before state is hydrated from storage.
+   * @default undefined
+   */
+  beforeRestore?: (context: PiniaPluginContext) => void;
+
+  /**
+   * Hook called after state is hydrated from storage.
+   * @default undefined
+   */
+  afterRestore?: (context: PiniaPluginContext) => void;
 }
 /**
  * state 域的上下文，T 为当前 state 的类型

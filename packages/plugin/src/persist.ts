@@ -6,15 +6,25 @@ import {
   CnListenerPersist,
   StorageLike,
   StateKeyType,
-  CnStatePersistContext,
   StateLevelPersist,
 } from './types';
 import { getPersistHashKey, debounce } from './util';
-import { restoreFromStoreValue } from './restore';
+import { getItem } from './restore';
 
-let debouncedConsumPersistEvent = () => {
-  console.warn('debouncedConsumPersistEvent is not initialized');
+export let setItem: (storage: StorageLike, key: string, value: string) => void;
+export const setSetItem = (debug: boolean) => {
+  setItem = (storage: StorageLike, key: string, value: string) => {
+    try {
+      storage.setItem(key, value);
+    } catch (e) {
+      if (debug) {
+        console.error(`[cn-persist-pinia-plugin] StorageLike.setItem('${key}', '${value}')`, e);
+      }
+    }
+  };
 };
+
+let debouncedConsumPersistEvent: () => void;
 /**
  * 自定义全局延迟时间
  */
@@ -64,6 +74,7 @@ const consumPersistEvent = () => {
         break;
     }
   });
+
   persistBuffer = {};
 };
 
@@ -82,7 +93,7 @@ const persistString = (persistKey: string, { storage, newValue, serialize }: CnP
      */
     return;
   }
-  storage.setItem(persistKey, persistValue);
+  setItem(storage, persistKey, persistValue);
 };
 
 /**
@@ -96,18 +107,18 @@ const persistString = (persistKey: string, { storage, newValue, serialize }: CnP
  */
 const persistHash = (persistKey: string, { storage, newValue, serialize }: CnPersistEvent) => {
   const newHashObject: Record<string, unknown> = newValue as Record<string, unknown>;
-  const oldHashKeysString = storage.getItem(persistKey);
+  const oldHashKeysString = getItem(storage, persistKey);
   const hashKeySet = oldHashKeysString ? new Set(JSON.parse(oldHashKeysString)) : new Set();
   Object.entries(newHashObject).forEach(([hashKey, newHashValue]) => {
     if (typeof newHashValue !== 'function') {
       const persistValue = serialize(newHashValue);
       if (persistValue != null) {
-        storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
+        setItem(storage, getPersistHashKey(persistKey, hashKey), persistValue);
         hashKeySet.add(hashKey);
       }
     }
   });
-  storage.setItem(persistKey, JSON.stringify(Array.from(hashKeySet)));
+  setItem(storage, persistKey, JSON.stringify(Array.from(hashKeySet)));
 };
 
 /**
@@ -122,7 +133,7 @@ const persistHash = (persistKey: string, { storage, newValue, serialize }: CnPer
  */
 const persistHashReset = (persistKey: string, { storage, newValue, serialize }: CnPersistEvent) => {
   const hashValue: Record<string, unknown> = newValue as Record<string, unknown>;
-  const oldHashKeysString = storage.getItem(persistKey);
+  const oldHashKeysString = getItem(storage, persistKey);
   // 待删除的旧 Entry
   const oldHashKeySetToDelete: Set<string> = oldHashKeysString ? new Set(JSON.parse(oldHashKeysString)) : new Set();
   const hashKeySet = new Set();
@@ -130,7 +141,7 @@ const persistHashReset = (persistKey: string, { storage, newValue, serialize }: 
     if (typeof value !== 'function') {
       const persistValue = serialize(value);
       if (persistValue != null) {
-        storage.setItem(getPersistHashKey(persistKey, hashKey), persistValue);
+        setItem(storage, getPersistHashKey(persistKey, hashKey), persistValue);
         hashKeySet.add(hashKey);
         if (oldHashKeySetToDelete.has(hashKey)) {
           oldHashKeySetToDelete.delete(hashKey);
@@ -141,7 +152,7 @@ const persistHashReset = (persistKey: string, { storage, newValue, serialize }: 
   oldHashKeySetToDelete.forEach(oldHashKeyToDelete => {
     storage.removeItem(getPersistHashKey(persistKey, oldHashKeyToDelete));
   });
-  storage.setItem(persistKey, JSON.stringify(Array.from(hashKeySet)));
+  setItem(storage, persistKey, JSON.stringify(Array.from(hashKeySet)));
 };
 
 /**
@@ -200,10 +211,6 @@ export const produceActionListener = (
   }
   return listenerContext => {
     listenerContext.after(() => {
-      console.log('');
-      console.log('listenerContext.name =', listenerContext.name);
-      console.log('actionNamePersisterRegistry =', actionNamePersisterRegistry);
-
       // Action 成功后执行持久化
       const actionPersister = actionNamePersisterRegistry.get(listenerContext.name);
       if (actionPersister) {
@@ -225,20 +232,5 @@ export const produceStorePersist = (
     for (const [stateKey, stateLevelPersist] of stateLevelPersistRegistry.entries()) {
       stateLevelPersist(storeState[stateKey]);
     }
-  };
-};
-
-export const produceStoreHydrate = (statePersistContextMap: Map<StateKeyType, CnStatePersistContext<unknown>>) => {
-  if (statePersistContextMap.size < 1) {
-    return () => {};
-  }
-  return () => {
-    statePersistContextMap.forEach(statePersistContext => {
-      const { storage, persistKey } = statePersistContext;
-      const storageValue = storage.getItem(persistKey);
-      if (storageValue) {
-        restoreFromStoreValue(storageValue, statePersistContext);
-      }
-    });
   };
 };

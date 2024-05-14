@@ -5,6 +5,7 @@ import { createPinia, defineStore, setActivePinia } from 'pinia';
 import { createCnPersistPiniaPlugin } from '../src/plugin';
 import { initializeLocalStorage, readLocalStoage } from './utils';
 import { getPersistKey } from '../src/util';
+import { StorageLike } from '../src';
 
 const STORE_ID = 'mock-store';
 const STATE_KEY = 'lorem';
@@ -242,7 +243,6 @@ describe('globalDebounce: 0', () => {
         //* act
         store[STATE_KEY] = STATE_VALUE;
         store.dolor.sit = 'amet';
-        // TODO，更深入一层的 setter 的情况没有考虑到
         store.dolor.consectetur.adipiscing = 'elit';
         await nextTick();
 
@@ -273,6 +273,103 @@ describe('globalDebounce: 0', () => {
         expect(store[STATE_KEY]).toEqual(STATE_VALUE);
         expect(store.dolor.consectetur.adipiscing).toEqual('elit');
         expect(localStorage.getItem).toHaveBeenCalledWith(dolorPersistKey);
+      });
+    });
+
+    describe('w/ storage', () => {
+      let stored: Record<string, string>;
+      const storage = {
+        getItem: vi.fn(key => stored[key]),
+        setItem: vi.fn((key, value) => {
+          stored[key] = value;
+        }),
+        removeItem: vi.fn(key => delete stored[key]),
+      };
+
+      const useStore = defineStore(STORE_ID, {
+        state: () => ({ [STATE_KEY]: {} }),
+        cnPersist: { storage },
+      });
+
+      it('persists to given storage', async () => {
+        //* arrange
+        stored = {};
+        const store = useStore();
+
+        //* act
+        store[STATE_KEY] = STATE_VALUE;
+        await nextTick();
+
+        //* assert
+        expect(stored[PERSIST_KEY]).toEqual(JSON.stringify(STATE_VALUE));
+        expect(storage.setItem).toHaveBeenCalled();
+      });
+
+      it('rehydrates from given storage', () => {
+        //* arrange
+        stored = { [PERSIST_KEY]: JSON.stringify(STATE_VALUE) };
+
+        //* act
+        const store = useStore();
+
+        //* assert
+        expect(store[STATE_KEY]).toEqual(STATE_VALUE);
+        expect(storage.getItem).toHaveBeenCalled();
+      });
+
+      it('catches storage.get errors', () => {
+        //* arrange
+        storage.getItem.mockImplementationOnce(() => {
+          throw new Error('get_error');
+        });
+
+        //* assert
+        expect(() => useStore()).not.toThrow();
+      });
+
+      it('catches storage.set errors', () => {
+        //* arrange
+        storage.setItem.mockImplementationOnce(() => {
+          throw new Error('set_error');
+        });
+
+        //* assert
+        expect(() => {
+          useStore()[STATE_KEY] = STATE_VALUE;
+        }).not.toThrow();
+      });
+    });
+
+    describe('w/ hooks', () => {
+      const beforeRestore = vi.fn(ctx => {
+        ctx.store.before = 'before';
+      });
+      const afterRestore = vi.fn(ctx => {
+        ctx.store.after = 'after';
+      });
+      const useStore = defineStore(STORE_ID, {
+        state: () => ({
+          [STATE_KEY]: {},
+          before: '',
+          after: '',
+        }),
+        cnPersist: { beforeRestore, afterRestore },
+      });
+
+      it('runs hooks before and after hydration', async () => {
+        //* arrange
+        initializeLocalStorage({ persistKey: PERSIST_KEY, value: STATE_VALUE });
+
+        //* act
+        await nextTick();
+        const store = useStore();
+
+        //* assert
+        expect(store[STATE_KEY]).toEqual(STATE_VALUE);
+        expect(beforeRestore).toHaveBeenCalled();
+        expect(store.before).toEqual('before');
+        expect(afterRestore).toHaveBeenCalled();
+        expect(store.after).toEqual('after');
       });
     });
   });

@@ -1,4 +1,4 @@
-import { toRaw, watch } from 'vue';
+import { isRef, toRaw, watch } from 'vue';
 import { PiniaPluginContext } from 'pinia';
 import {
   CnPersistFactoryOptions,
@@ -9,15 +9,16 @@ import {
   StateLevelPersist,
 } from './types';
 import {
+  emitPersistEvent,
   produceActionListener,
   produceHashLevelPersist,
   produceStateLevelPersist,
-  produceStoreHydrate,
   produceStorePersist,
   setGlobalDebounce,
+  setSetItem,
 } from './persist';
 import { getPersistKey, mixOptions, produceStatePersistContext, produceStorePersistContext } from './util';
-import { initPersistOrRestore } from './init';
+import { getItem, produceStoreHydrate, restoreState, setGetItem } from './restore';
 
 export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptions = {}) => {
   const { auto = false, globalDebounce = 500 } = factoryOptions;
@@ -64,7 +65,9 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
       return;
     }
 
-    const { key, states } = storePersistContext;
+    const { key, states, debug, beforeRestore, afterRestore } = storePersistContext;
+    setSetItem(debug);
+    setGetItem(debug);
 
     /**
      * 为了方便用户配置 states 时能利用 typescript 自动根据 state 补全 state key，
@@ -86,6 +89,8 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
     const stateLevelPersistRegistry: Map<StateKeyType, StateLevelPersist> = new Map();
     const statePersistContextMap: Map<StateKeyType, CnStatePersistContext<unknown>> = new Map();
     const actionNamePersisterRegistry: Map<string, CnListenerPersist> = new Map();
+    // 初始化时要恢复的 state
+    const initRestoreStates: Array<CnStatePersistContext<unknown>> = [];
 
     persistStateKeys.forEach(stateKey => {
       const statePersistOptions: CnStatePersistOptions<unknown> = states[stateKey]!;
@@ -141,7 +146,17 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
        * 有持久化数据则用持久化数据设置 state 的值，这种情况持久化值会覆盖 state 的初始值
        * 如果没有持久化数据，而 state 有初始值，则为 state 的初始值进行持久化
        */
-      initPersistOrRestore(statePersistContext);
+      const storageValue = getItem(storage, persistKey);
+      if (!storageValue) {
+        // 如果持久化数据不存在，则检查 state 是否有初始值，如果有则对初始值进行持久化
+        const stateValue = storeState[stateKey];
+        const initValue = isRef(stateValue) ? stateValue.value : stateValue;
+        if (initValue) {
+          emitPersistEvent(policy == 'STRING' ? 'STRING' : 'HASH_RESET', storage, persistKey, initValue, serialize!);
+        }
+      } else {
+        initRestoreStates.push(statePersistContext);
+      }
     });
 
     if (actionNamePersisterRegistry.size > 0) {
@@ -157,9 +172,21 @@ export const createCnPersistPiniaPlugin = (factoryOptions: CnPersistFactoryOptio
     store.$persist = produceStorePersist(stateLevelPersistRegistry, store.$state);
 
     /**
+     * 恢复初始化时 storage 中已经存在的持久化数据
+     * 这种情况下以持久化数据为准，即如果 state 有初始值，则初始值会被持久化数据覆盖
+     */
+    if (initRestoreStates.length > 0) {
+      beforeRestore?.(context);
+      initRestoreStates.forEach(statePersistContext => {
+        restoreState(statePersistContext);
+      });
+      afterRestore?.(context);
+    }
+
+    /**
      * 对 store 整体恢复
      */
-    store.$hydrate = produceStoreHydrate(statePersistContextMap);
+    store.$hydrate = produceStoreHydrate(statePersistContextMap, context, beforeRestore, afterRestore);
 
     return {};
   };

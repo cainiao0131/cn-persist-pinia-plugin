@@ -1,6 +1,21 @@
 import { isRef } from 'vue';
 import { getPersistHashKey } from './util';
-import { CnStatePersistContext } from './types';
+import { CnStatePersistContext, StateKeyType, StorageLike } from './types';
+import { PiniaPluginContext } from 'pinia';
+
+export let getItem: (storage: StorageLike, key: string) => string | null;
+export const setGetItem = (debug: boolean) => {
+  getItem = (storage: StorageLike, key: string) => {
+    try {
+      return storage.getItem(key);
+    } catch (e) {
+      if (debug) {
+        console.error(`[cn-persist-pinia-plugin] StorageLike.getItem('${key}')`, e);
+      }
+    }
+    return null;
+  };
+};
 
 export const restoreFromStoreValue = (storageValue: string, statePersistContext: CnStatePersistContext<unknown>) => {
   const {
@@ -48,7 +63,7 @@ export const restoreHash = (
   const hashValue: Record<string, unknown> = {};
   const hashKeys: Array<string> = JSON.parse(stringValue);
   hashKeys.forEach(hashKey => {
-    const persistValue = storage.getItem(getPersistHashKey(persistKey, hashKey));
+    const persistValue = getItem(storage, getPersistHashKey(persistKey, hashKey));
     if (persistValue != null) {
       const value_ = deserialize!(persistValue);
       if (value_ != null) {
@@ -61,5 +76,39 @@ export const restoreHash = (
     stateValue.value = deserializePostHandler!(hashValue);
   } else {
     storeState[stateKey] = deserializePostHandler!(hashValue);
+  }
+};
+
+export const produceStoreHydrate = (
+  statePersistContextMap: Map<StateKeyType, CnStatePersistContext<unknown>>,
+  context: PiniaPluginContext,
+  beforeRestore?: (context: PiniaPluginContext) => void,
+  afterRestore?: (context: PiniaPluginContext) => void,
+) => {
+  if (statePersistContextMap.size < 1) {
+    return () => {};
+  }
+  return ({ runHooks = true } = {}) => {
+    if (runHooks) {
+      beforeRestore?.(context);
+    }
+    statePersistContextMap.forEach(statePersistContext => {
+      const { storage, persistKey } = statePersistContext;
+      const storageValue = getItem(storage, persistKey);
+      if (storageValue) {
+        restoreFromStoreValue(storageValue, statePersistContext);
+      }
+    });
+    if (runHooks) {
+      afterRestore?.(context);
+    }
+  };
+};
+
+export const restoreState = (statePersistContext: CnStatePersistContext<unknown>) => {
+  const { storage, persistKey } = statePersistContext;
+  const storageValue = getItem(storage, persistKey);
+  if (storageValue) {
+    restoreFromStoreValue(storageValue, statePersistContext);
   }
 };
