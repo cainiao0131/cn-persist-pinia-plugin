@@ -12,6 +12,11 @@ _selenium-server.log
 packages/*/LICENSE
 tracing_output
 
+# Temp directories
+.temp
+.tmp
+**/.vitepress/cache
+
 # Logs
 logs
 *.log
